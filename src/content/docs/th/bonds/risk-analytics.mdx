@@ -1,0 +1,101 @@
+---
+title: การวิเคราะห์ความเสี่ยงตราสารหนี้ (Fixed Income Risk Analytics)
+description: Macaulay Duration, Modified Duration, Convexity, และตัวชี้วัดความไวต่ออัตราดอกเบี้ย DV01 เชิงวิเคราะห์
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/bonds/risk-analytics/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+ผู้จัดการความเสี่ยงและ Quantitative Trader พึ่งพาตัวชี้วัดความไว (Sensitivity Measures) ในการป้องกันความเสี่ยงอัตราดอกเบี้ย (Hedge Interest Rate Risk) ตลอดแนวเส้นโค้งผลตอบแทน
+
+## ภาพรวมตัวชี้วัดความเสี่ยง (Risk Metrics Overview)
+
+### 1. Macaulay Duration ($D_{\text{mac}}$)
+
+ระยะเวลาเฉลี่ยถ่วงน้ำหนักของกระแสเงินสดที่คาดว่าจะได้รับ (วัดเป็นหน่วยปี):
+
+$$D_{\text{mac}} = \frac{\sum_{i=1}^n t_i \, A_i \, d(y, t_i)}{P_{\text{dirty}}}$$
+
+### 2. Modified Duration ($D_{\text{mod}}$)
+
+วัดเปอร์เซ็นต์การเปลี่ยนแปลงของราคาพันธบัตรต่อการเปลี่ยนแปลงของอัตราผลตอบแทน $y$:
+
+$$D_{\text{mod}} = -\frac{1}{P_{\text{dirty}}} \frac{dP}{dy} = \frac{D_{\text{mac}}}{1 + \frac{y}{m}}$$
+
+### 3. Convexity ($C$)
+
+ความโค้งอันดับที่สองของความสัมพันธ์ระหว่างราคาและผลตอบแทน:
+
+$$C = \frac{1}{P_{\text{dirty}}} \frac{d^2P}{dy^2} = \frac{1}{P_{\text{dirty}}} \sum_{i=1}^n t_i \left(t_i + \frac{1}{m}\right) A_i \left(1 + \frac{y}{m}\right)^{-(m \cdot t_i + 2)}$$
+
+### 4. Dollar Value of a Basis Point (DV01)
+
+มูลค่าเงินที่เปลี่ยนแปลงไปเมื่ออัตราผลตอบแทนขยับแบบขนาน 1 basis point ($0.01\% = 10^{-4}$):
+
+$$\text{DV01} = -\frac{dP}{dy} \times 0.0001 = P_{\text{dirty}} \times D_{\text{mod}} \times 0.0001$$
+
+### 5. การประมาณการเปลี่ยนแปลงราคาอันดับที่สอง (Second-Order Price Shift Approximation)
+
+กระจายด้วยอนุกรมเทย์เลอร์อันดับสอง:
+
+$$\frac{\Delta P}{P} \approx -D_{\text{mod}} \, \Delta y + \frac{1}{2} C \, (\Delta y)^2$$
+
+$$\Delta P \approx -\text{DV01} \times 10^4 \, \Delta y + \frac{1}{2} P_{\text{dirty}} \, C \, (\Delta y)^2$$
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::bonds::BondPricingPlan;
+use sabiquant::core::{Date, Frequency};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::core::daycount::ActualActualICMA;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let settlement = Date::from_ymd(2025, 1, 15)?;
+    let maturity   = Date::from_ymd(2035, 1, 15)?;
+
+    let plan = BondPricingPlan::builder()
+        .settlement(settlement)
+        .maturity(maturity)
+        .coupon_rate(0.04) // 4.0%
+        .frequency(Frequency::Annual)
+        .calendar(TargetCalendar::default())
+        .day_counter(ActualActualICMA::default())
+        .face_value(100.0)
+        .build()?;
+
+    let base_yield = 0.045; // 4.5%
+    let metrics = plan.price_from_yield(base_yield)?;
+
+    println!("Base Dirty Price:    ${:.4}", metrics.dirty_price);
+    println!("Modified Duration:   {:.4}", metrics.modified_duration);
+    println!("Convexity:           {:.4}", metrics.convexity);
+
+    // คำนวณ DV01 ต่อมูลค่าหน้าตั๋ว 100
+    let dv01 = -metrics.dp_dy * 0.0001;
+    println!("DV01:                ${:.5}", dv01);
+
+    // ประมาณผลกระทบต่อราคาเมื่อดอกเบี้ยขยับขึ้น +50 bps (+0.005)
+    let delta_y = 0.005;
+    let duration_effect = -metrics.modified_duration * delta_y;
+    let convexity_effect = 0.5 * metrics.convexity * delta_y.powi(2);
+    let approx_pct_change = duration_effect + convexity_effect;
+
+    println!("Duration Effect:     {:.3}%", duration_effect * 100.0);
+    println!("Convexity Effect:    +{:.3}%", convexity_effect * 100.0);
+    println!("Predicted Total ΔP%: {:.3}%", approx_pct_change * 100.0);
+
+    // เปรียบเทียบกับการคำนวณราคาจริงแบบแน่นอน (Exact repricing)
+    let shocked_metrics = plan.price_from_yield(base_yield + delta_y)?;
+    let exact_pct_change = (shocked_metrics.dirty_price - metrics.dirty_price) / metrics.dirty_price;
+    println!("Exact Repriced ΔP%:  {:.3}%", exact_pct_change * 100.0);
+
+    Ok(())
+}
+```
+

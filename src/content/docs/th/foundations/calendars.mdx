@@ -1,0 +1,73 @@
+---
+title: ปฏิทินตลาดและข้อตกลงวันทำการ (Market Calendars & Conventions)
+description: ข้อตกลงวันทำการ (Business Day Conventions) ปฏิทินชำระราคา TARGET และกฎการเลื่อนวันหยุด
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/foundations/calendars/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+สัญญาทางการเงินจะชำระราคาเฉพาะในวันทำการที่ถูกต้องเท่านั้น SabiQuant มีปฏิทินตลาดประสิทธิภาพสูงและกฎการปรับวันทำการตามมาตรฐาน ISDA
+
+## ข้อตกลงวันทำการ (Business Day Conventions)
+
+เมื่อวันที่ที่กำหนดตามตารางตรงกับวันหยุดสุดสัปดาห์หรือวันหยุดนักขัตฤกษ์ จะต้องทำการปรับเลื่อนวันตามข้อตกลง:
+
+| ข้อตกลง (Convention) | กฎการปรับเลื่อน (Rule) |
+| :--- | :--- |
+| **`Following`** | เลื่อนไปยังวันทำการแรก *ถัดจาก* วันดังกล่าว |
+| **`ModifiedFollowing`** | เลื่อนไปยังวันทำการถัดไป *เว้นแต่* จะข้ามไปยังเดือนใหม่ ให้ถอยกลับมายังวันทำการก่อนหน้า |
+| **`Preceding`** | ถอยกลับไปยังวันทำการแรก *ก่อนหน้า* วันดังกล่าว |
+| **`ModifiedPreceding`** | ถอยกลับไปยังวันทำการก่อนหน้า *เว้นแต่* จะถอยข้ามไปเดือนก่อนหน้า ให้เลื่อนไปข้างหน้า |
+| **`Unadjusted`** | ไม่ปรับเลื่อน คงวันที่เดิมตามปฏิทินไว้ |
+
+---
+
+## ปฏิทินตลาด (Market Calendars)
+
+### ปฏิทิน TARGET (`TargetCalendar`)
+
+ปฏิทินการชำระเงินระหว่างธนาคารของยุโรป (TARGET2 / T2) ซึ่งกำหนดวันหยุดดังนี้:
+- วันเสาร์และวันอาทิตย์
+- วันขึ้นปีใหม่ (1 มกราคม)
+- วันศุกร์ประเสริฐ (Good Friday) และวันจันทร์อีสเตอร์ (Easter Monday)
+- วันแรงงาน (1 พฤษภาคม)
+- วันคริสต์มาส (25 ธันวาคม) และวันเปิดกล่องของขวัญ (Boxing Day 26 ธันวาคม)
+
+### ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::core::{Date, BusinessDayConvention};
+use sabiquant::core::calendars::{Calendar, TargetCalendar, WeekendOnlyCalendar};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let calendar = TargetCalendar::default();
+
+    // วันที่ 1 พฤษภาคม (วันแรงงาน) เป็นวันหยุดใน TARGET
+    let labour_day = Date::from_ymd(2025, 5, 1)?;
+    println!("Is Labour Day a business day? {}", calendar.is_business_day(labour_day)); // false
+
+    // ปรับเลื่อนวันทำการแบบ Following
+    let adjusted_following = calendar.adjust(labour_day, BusinessDayConvention::Following);
+    println!("Following adjustment: {}", adjusted_following); // 2025-05-02
+
+    // เลื่อนไปข้างหน้า 5 วันทำการ
+    let advanced_date = calendar.advance_business_days(labour_day, 5);
+    println!("5 business days later: {}", advanced_date);
+
+    // นับจำนวนวันทำการระหว่าง 2 วันที่
+    let start = Date::from_ymd(2025, 5, 1)?;
+    let end   = Date::from_ymd(2025, 5, 31)?;
+    let bdays = calendar.business_days_between(start, end);
+    println!("Business days in May 2025: {}", bdays);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  คุณสามารถสร้างปฏิทินวันหยุดเฉพาะสำหรับองค์กรหรือตลาดหลักทรัพย์ของตนเองได้ง่ายๆ ด้วยการ implement Trait `Calendar`
+</Aside>
+

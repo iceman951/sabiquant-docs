@@ -1,0 +1,57 @@
+---
+title: ตัวแก้สมการหาค่าราก 1 มิติ (1D Root-Finding Solvers)
+description: ตัวแก้สมการ 1 มิติประสิทธิภาพสูง ปลอดการจัดสรรหน่วยความจำ (Allocation-free) ทั้ง Brent, Safeguarded Newton, และ Bisection
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/mathematics/solvers/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+การหาค่ารากของสมการ (Root Finding) ปรากฏอยู่ทั่วไปในงาน Quantitative Finance ตั้งแต่การ Invert หาผลตอบแทนพันธบัตรและ Implied Volatility ไปจนถึงการหาราคาดุลยภาพในการชำระราคา SabiQuant มีชุดตัวแก้สมการเชิงตัวเลขที่ออกแบบมาโดยไม่มีการจอง Heap Allocation
+
+## ระเบียบวิธีที่มีให้ใช้งาน (Implemented Solvers)
+
+### 1. ระเบียบวิธีของเบรนต์ (`BrentSolver`)
+ผสานระหว่าง Inverse Quadratic Interpolation, Secant Method, และ Bisection การันตีการลู่เข้าอย่างสมบูรณ์สำหรับฟังก์ชันต่อเนื่องที่มีขอบเขต $[a, b]$ คร่อมรากสมการ $f(a) \cdot f(b) < 0$
+
+### 2. Safeguarded Newton-Raphson (`SafeguardedNewtonSolver`)
+ใช้อนุพันธ์เชิงวิเคราะห์ $f'(x)$ เพื่อการลู่เข้าแบบ Quadratic:
+
+$$x_{k+1} = x_k - \frac{f(x_k)}{f'(x_k)}$$
+
+หากจุด $x_{k+1}$ กระโดดออกนอกขอบเขตที่ถูกต้อง $[a, b]$ หรือความคลาดเคลื่อนลดลงไม่เร็วพอ ระบบจะสลับไปใช้ขั้นตอนแบ่งครึ่งช่วง (Bisection Step) โดยอัตโนมัติ
+
+### 3. ระเบียบวิธีแบ่งครึ่งช่วง (`BisectionSolver`)
+วิธีมาตรฐานที่มีความเสถียรอย่างไร้เงื่อนไข โดยมีอัตราการลู่เข้าแบบเส้นตรงที่ระดับ $O(\log_2(1/\varepsilon))$
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::math::solvers::{BrentSolver, Solver1D};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // แก้สมการ f(x) = x^3 - 2x - 5 = 0  (รากที่แท้จริง ~ 2.09455148)
+    let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
+
+    let solver = BrentSolver::new()
+        .max_iterations(100)
+        .tolerance(1e-12);
+
+    let bracket_low = 1.0;
+    let bracket_high = 3.0;
+
+    let root = solver.solve(&f, bracket_low, bracket_high)?;
+
+    println!("Found Root: {:.12}", root);
+    println!("Residual:   {:.2e}", f(root));
+
+    assert!((f(root)).abs() < 1e-12);
+
+    Ok(())
+}
+```
+

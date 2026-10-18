@@ -1,0 +1,63 @@
+---
+title: ทศนิยมความละเอียดสูง (Exact Decimal Arithmetic)
+description: โครงสร้างข้อมูลเงินทศนิยมจุดคงที่ขนาด 128-bit ความละเอียด 38 ตำแหน่ง พร้อมโหมดการปัดเศษ 7 รูปแบบ
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/exact-money/exact-decimal/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+เลขทศนิยมลอยตัว (`f32`, `f64`) จัดเก็บข้อมูลด้วยเศษส่วนฐานสอง ซึ่งก่อให้เกิดความคลาดเคลื่อนในการคำนวณเลขฐานสิบทางการเงิน (เช่น $0.1 + 0.2 \ne 0.3$)
+
+SabiQuant มอบ `DecimalAmount` กลไกการคำนวณเลขทศนิยมจุดคงที่ (Fixed-point) ขนาด 128-bit ความสมบูรณ์สูง ออกแบบมาเพื่อระบบบัญชี การชำระราคา (Clearing) และการโอนเงินโดยเฉพาะ
+
+## ข้อมูลจำเพาะหลัก (Key Specifications)
+
+- **Internal Representation:** จำนวนเต็มมีเครื่องหมายขนาด 128-bit พร้อมเลขชี้กำลังฐานสิบ
+- **Precision:** ความแม่นยำแน่นอนสูงสุดถึง 38 ตำแหน่งทศนิยม
+- **Zero Allocations:** จัดเก็บข้อมูลบน Stack แบบ Copy semantics ไม่มีการจองหน่วยความจำบน Heap
+- **Rounding Modes:** โหมดการปัดเศษมาตรฐาน 7 รูปแบบตามมาตรฐาน IEEE 754 / ISO:
+  1. `HalfEven` (Banker's rounding - ค่ามาตรฐานของสถาบันการเงินสากล)
+  2. `HalfUp` (ปัดเศษขึ้นเมื่อถึงครึ่งหนึ่งไปยังอนันต์บวก)
+  3. `HalfDown` (ปัดเศษลงเมื่อถึงครึ่งหนึ่งเข้าหาศูนย์)
+  4. `Ceiling` (ปัดขึ้นไปยัง $+\infty$)
+  5. `Floor` (ปัดลงไปยัง $-\infty$)
+  6. `Up` (ปัดออกจากศูนย์)
+  7. `Down` (ตัดเศษเข้าหาศูนย์)
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::exact::{DecimalAmount, RoundingMode};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // การแปลงสตริงตัวเลขทศนิยมแน่นอน
+    let price  = DecimalAmount::from_str("102.435000000000000000")?;
+    let factor = DecimalAmount::from_str("0.045000000000000000")?;
+
+    // การคูณแบบตรวจสอบ Overflow
+    let gross = price.checked_mul(&factor)?;
+    println!("Exact Gross: {}", gross);
+
+    // การปัดเศษทศนิยม 2 ตำแหน่งเพื่อการชำระเงินสด
+    let rounded_bankers = gross.round(2, RoundingMode::HalfEven)?;
+    let rounded_up      = gross.round(2, RoundingMode::Up)?;
+
+    println!("Half-Even (Banker's): {}", rounded_bankers);
+    println!("Round Up:             {}", rounded_up);
+
+    // การเปรียบเทียบที่ปลอดภัยโดยไม่มี Epsilon jitter
+    assert!(rounded_bankers <= rounded_up);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  `DecimalAmount` ช่วยป้องกันปัญหาเศษสตางค์รั่วไหลเมื่อต้องประมวลผลธุรกรรมนับล้านรายการในระบบซื้อขาย
+</Aside>
+

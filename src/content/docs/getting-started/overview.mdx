@@ -1,0 +1,34 @@
+---
+title: Overview & Philosophy
+description: The core design principles, engineering philosophy, and architectural goals of SabiQuant.
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+**SabiQuant** is a high-integrity, zero-dependency quantitative finance library written from the ground up in idiomatic Rust. It is designed to bring mission-critical reliability, strict numerical precision, and modern software ergonomics to financial engineering.
+
+## Engineering Philosophy
+
+### 1. Zero External Dependencies (`std`-only)
+Most modern quantitative stacks suffer from dependency bloat, transitive security vulnerabilities, and unpredictable upstream breaking changes. 
+
+SabiQuant has **zero external crate dependencies**. Everything—from date arithmetic, market calendars, and root solvers to normal distributions and fixed-point decimals—is implemented purely using the Rust Standard Library (`std`).
+- Instantaneous compilation times
+- 100% auditability for regulatory environments
+- Effortless deployment to WebAssembly, embedded devices, and strict sandbox containers
+
+### 2. Verified QuantLib Parity
+QuantLib has been the de facto reference implementation in quantitative finance for over two decades. SabiQuant adopts QuantLib's established conventions and benchmarks test cases against it to ensure exact numerical parity across:
+- ISDA/ICMA Day Count Conventions
+- Target and exchange settlement calendars
+- Bond pricing plans and compounding mechanics
+- Stub period calculations and cashflow generation
+
+### 3. Exact Money & Settlement Boundary
+Floating-point numbers (`f64`) are inherently subject to binary rounding errors, making them dangerous for accounting and cash settlement. SabiQuant introduces a dual-layer architecture:
+- **`f64` for Continuous Analytics:** Used for yield inversion, volatility, duration, and partial differential equations where continuous differentiability is needed.
+- **`DecimalAmount` for Settlement:** A 128-bit exact fixed-point decimal with 38 decimal places and explicit IEEE rounding modes (Half-Even, Floor, Ceiling, Up, Down, Half-Up, Half-Down) to ensure 100% reconciliation with ledger systems.
+
+### 4. Zero Unnecessary Allocations
+Evaluation loops in SabiQuant (such as pricing plans and iterative solvers) are designed to avoid heap allocations. Reusable workspaces and pre-computed schedules yield deterministic performance and sub-microsecond latency.
+

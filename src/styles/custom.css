@@ -1,0 +1,44 @@
+/* KaTeX formula display styling */
+.katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.75rem 0;
+  margin: 1.25rem 0 !important;
+}
+
+.katex {
+  font-size: 1.1em;
+  text-rendering: optimizeLegibility;
+}
+
+/* Custom quantitative finance accent theme */
+:root {
+  --sl-color-accent-low: #0f2b3c;
+  --sl-color-accent: #0284c7;
+  --sl-color-accent-high: #bae6fd;
+}
+
+:root[data-theme='light'] {
+  --sl-color-accent-low: #e0f2fe;
+  --sl-color-accent: #0284c7;
+  --sl-color-accent-high: #0369a1;
+}
+
+/* Code block tweaks */
+.expressive-code pre {
+  border-radius: 0.5rem;
+}
+
+/* Feature grid customization */
+.hero-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.hero-badges img {
+  height: 22px;
+}
+

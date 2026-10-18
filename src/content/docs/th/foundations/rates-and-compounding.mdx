@@ -1,0 +1,72 @@
+---
+title: อัตราดอกเบี้ยและการคิดทบต้น (Interest Rates & Compounding)
+description: ตัวคูณคิดลด (Discount Factors) กฎการคิดดอกเบี้ยทบต้น และการแปลงอัตราดอกเบี้ยที่เทียบเท่ากัน
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/foundations/rates-and-compounding/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+คณิตศาสตร์อัตราดอกเบี้ยทำหน้าที่แปลงอัตราดอกเบี้ยที่ระบุ (Nominal Rates) ไปสู่มูลค่าเงินตามเวลา ผ่านตัวคูณคิดลด (Discount Factor) และตัวคูณทบต้น (Compound Factor)
+
+## รูปแบบการคิดดอกเบี้ยทบต้น (Compounding Conventions)
+
+เมื่อกำหนดอัตราดอกเบี้ยต่อปี $r$ และสัดส่วนปี $t$:
+
+### 1. การคิดทบต้นตามงวด ($m$ ครั้งต่อปี)
+$$C(r, t) = \left( 1 + \frac{r}{m} \right)^{m \cdot t}, \quad d(r, t) = \frac{1}{C(r, t)} = \left( 1 + \frac{r}{m} \right)^{-m \cdot t}$$
+
+### 2. การคิดทบต้นต่อเนื่อง (Continuous Compounding)
+$$C(r, t) = e^{r \cdot t}, \quad d(r, t) = e^{-r \cdot t}$$
+
+### 3. การคิดดอกเบี้ยเชิงเดี่ยว (Simple Compounding)
+$$C(r, t) = 1 + r \cdot t, \quad d(r, t) = \frac{1}{1 + r \cdot t}$$
+
+### 4. ดอกเบี้ยเชิงเดี่ยวก่อนแล้วจึงทบต้น (Simple Then Compounded)
+ใช้สำหรับตราสารตลาดเงินที่มีช่วงเศษงวด (Stub): ใช้ดอกเบี้ยเชิงเดี่ยวสำหรับ $t \le 1/m$ และคิดทบต้นหลังจากนั้น
+
+---
+
+## การแปลงอัตราดอกเบี้ยที่เทียบเท่ากัน (Equivalent Rate Conversions)
+
+การแปลงอัตราดอกเบี้ย $r_1$ ที่มีความถี่ $m_1$ ไปเป็นอัตราดอกเบี้ย $r_2$ ที่มีความถี่ $m_2$ โดยที่ตัวคูณคิดลดมีค่าเท่ากัน:
+
+$$\left( 1 + \frac{r_1}{m_1} \right)^{m_1} = \left( 1 + \frac{r_2}{m_2} \right)^{m_2}$$
+
+$$r_2 = m_2 \left[ \left( 1 + \frac{r_1}{m_1} \right)^{\frac{m_1}{m_2}} - 1 \right]$$
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::core::rates::{InterestRate, Compounding};
+use sabiquant::core::Frequency;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // อัตราดอกเบี้ย 5.0% ต่อปี จ่ายทบต้นทุกครึ่งปี (Semi-Annual)
+    let rate = InterestRate::new(0.05, Compounding::Compounded, Frequency::SemiAnnual);
+
+    let time = 2.5; // ระยะเวลา 2.5 ปี
+
+    // คำนวณตัวคูณทบต้นและตัวคูณคิดลด
+    let compound_factor = rate.compound_factor(time);
+    let discount_factor = rate.discount_factor(time);
+
+    println!("Compound Factor (2.5Y): {:.6}", compound_factor);
+    println!("Discount Factor (2.5Y): {:.6}", discount_factor);
+
+    // แปลงเป็นอัตราดอกเบี้ยทบต้นต่อเนื่องที่เทียบเท่ากัน
+    let continuous_rate = rate.equivalent_rate(Compounding::Continuous, Frequency::Annual, time)?;
+    println!("Continuous Equivalent:  {:.5}%", continuous_rate.rate() * 100.0);
+
+    // แปลงเป็นอัตราดอกเบี้ยทบต้นรายไตรมาสที่เทียบเท่ากัน
+    let quarterly_rate = rate.equivalent_rate(Compounding::Compounded, Frequency::Quarterly, time)?;
+    println!("Quarterly Equivalent:   {:.5}%", quarterly_rate.rate() * 100.0);
+
+    Ok(())
+}
+```
+

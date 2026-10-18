@@ -1,0 +1,115 @@
+---
+title: การประเมินราคาตราสารหนี้และการวิเคราะห์ความเสี่ยง
+description: คู่มือฉบับสมบูรณ์เกี่ยวกับการประเมินราคาพันธบัตร การแยกราคา Clean/Dirty และการวัดค่าความเสี่ยงเชิงวิเคราะห์ใน SabiQuant
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  สูตรคณิตศาสตร์และตัวอย่างโค้ดในหน้านี้ยึดตาม [เอกสารต้นฉบับภาษาอังกฤษ](/sabiquant-docs/bonds/pricing-and-risk/) ซึ่งเป็น Single Source of Truth ของโปรเจกต์
+</Aside>
+
+ตราสารหนี้เป็นหัวใจสำคัญของงาน Quantitative Finance สำหรับสถาบันการเงิน SabiQuant มอบกลไกการประเมินราคาพันธบัตรที่สร้างขึ้นบน `std` โดยปราศจากการพึ่งพาไลบรารีภายนอก และได้รับการตรวจสอบความถูกต้องเชิงตัวเลขเทียบเคียงกับ QuantLib
+
+## การกำหนดสูตรทางคณิตศาสตร์ (Mathematical Formulation)
+
+### 1. การประเมินราคาแบบ Dirty Price
+
+สำหรับพันธบัตรที่มีกระแสเงินสด $A_i$ (คูปองและการไถ่ถอนมูลค่าหน้าตั๋ว) ที่ชำระ ณ เวลา $t_i$ (วัดเป็นเศษส่วนของปีนับจากวันชำระราคาตามอนุสัญญาการนับวัน) ราคาเต็มหรือราคา Dirty $P(y)$ ภายใต้อัตราผลตอบแทนทบต้นต่อปี $y$ ด้วยความถี่การทบต้น $m$ ครั้งต่อปี จะคำนวณได้จาก:
+
+$$P(y) = \sum_{i=1}^n A_i \, d(y, t_i)$$
+
+โดยตัวคูณคิดลด (Discount factor) $d(y, t_i)$ ขึ้นอยู่กับรูปแบบการคิดทบต้น:
+
+- **การคิดทบต้นตามงวด ($m$ ครั้งต่อปี):**
+  $$d(y, t_i) = \left( 1 + \frac{y}{m} \right)^{-m \cdot t_i}$$
+
+- **การคิดทบต้นต่อเนื่อง (Continuous Compounding):**
+  $$d(y, t_i) = e^{-y \cdot t_i}$$
+
+### 2. ราคา Clean และดอกเบี้ยค้างรับ (Accrued Interest)
+
+ในตลาดตราสารหนี้ ราคาที่เสนอซื้อขายมักจะอยู่ในรูป **ราคา Clean** ($P_{\text{clean}}$) ซึ่งไม่รวมดอกเบี้ยค้างรับ ($AI$) ที่สะสมระหว่างงวดการจ่ายคูปอง:
+
+$$P_{\text{dirty}} = P_{\text{clean}} + AI$$
+
+ดอกเบี้ยค้างรับคำนวณจากวันจ่ายคูปองครั้งก่อนหน้า $t_{\text{prev}}$, วันชำระราคา $t_{\text{settle}}$, และวันจ่ายคูปองครั้งถัดไป $t_{\text{next}}$:
+
+$$AI = C \times \frac{\text{DayCount}(t_{\text{prev}}, t_{\text{settle}})}{\text{DayCount}(t_{\text{prev}}, t_{\text{next}})}$$
+
+โดย $C$ คือยอดจ่ายคูปองทั้งหมดสำหรับงวดนั้น
+
+### 3. ตัวชี้วัดความเสี่ยงเชิงวิเคราะห์ (Analytical Risk Measures)
+
+แทนที่จะใช้การประมาณค่าผลต่างสืบเนื่องแบบจำกัด ($\Delta y \approx 1\text{bp}$) ซึ่งทำให้เกิดความคลาดเคลื่อนเชิงตัวเลข SabiQuant จะคำนวณ **อนุพันธ์เชิงวิเคราะห์ที่แน่นอน**:
+
+$$D_{\text{mod}} = -\frac{1}{P} \frac{dP}{dy}, \quad C = \frac{1}{P} \frac{d^2P}{dy^2}$$
+
+#### อนุพันธ์อันดับที่หนึ่ง ($dP/dy$) และ Modified Duration
+$$\frac{dP}{dy} = -\sum_{i=1}^n t_i \, A_i \left( 1 + \frac{y}{m} \right)^{-(m \cdot t_i + 1)}$$
+
+$$D_{\text{mac}} = \frac{1}{P} \sum_{i=1}^n t_i \, A_i \, d(y, t_i)$$
+
+$$D_{\text{mod}} = \frac{D_{\text{mac}}}{1 + \frac{y}{m}}$$
+
+#### อนุพันธ์อันดับที่สอง ($d^2P/dy^2$) และ Convexity
+$$\frac{d^2P}{dy^2} = \sum_{i=1}^n t_i \left( t_i + \frac{1}{m} \right) A_i \left( 1 + \frac{y}{m} \right)^{-(m \cdot t_i + 2)}$$
+
+$$C = \frac{1}{P} \frac{d^2P}{dy^2}$$
+
+<Aside type="tip">
+  การคำนวณ $dP/dy$ และ $d^2P/dy^2$ เชิงวิเคราะห์ช่วยให้การกระจายอนุกรมเทย์เลอร์สำหรับการเปลี่ยนแปลงราคาพันธบัตรมีความแม่นยำสูงระดับ Machine Precision:
+  $$\frac{\Delta P}{P} \approx -D_{\text{mod}} \Delta y + \frac{1}{2} C (\Delta y)^2$$
+</Aside>
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::bonds::{BondPricingPlan, BondPricingResult};
+use sabiquant::core::{Date, Frequency};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::core::daycount::ActualActualICMA;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. กำหนดวันชำระราคาและวันครบกำหนดไถ่ถอน
+    let settlement = Date::from_ymd(2025, 6, 15)?;
+    let maturity   = Date::from_ymd(2035, 6, 15)?;
+
+    // 2. เรียกใช้ปฏิทินตลาดและอนุสัญญาการนับวัน
+    let calendar = TargetCalendar::default();
+    let day_counter = ActualActualICMA::default();
+
+    // 3. สร้าง BondPricingPlan (พันธบัตร 10 ปี, คูปอง 5.00% จ่ายปีละ 2 ครั้ง)
+    let plan = BondPricingPlan::builder()
+        .settlement(settlement)
+        .maturity(maturity)
+        .coupon_rate(0.050)
+        .frequency(Frequency::SemiAnnual)
+        .calendar(calendar)
+        .day_counter(day_counter)
+        .face_value(100.0)
+        .build()?;
+
+    // 4. คำนวณราคาและความเสี่ยงที่อัตราผลตอบแทน 4.75%
+    let yield_to_maturity = 0.0475;
+    let metrics: BondPricingResult = plan.price_from_yield(yield_to_maturity)?;
+
+    println!("Dirty Price:        ${:.5}", metrics.dirty_price);
+    println!("Clean Price:        ${:.5}", metrics.clean_price);
+    println!("Accrued Interest:   ${:.5}", metrics.accrued_interest);
+    println!("Macaulay Duration:  {:.4} ปี", metrics.macaulay_duration);
+    println!("Modified Duration:  {:.4}", metrics.modified_duration);
+    println!("Convexity:          {:.4}", metrics.convexity);
+    println!("dP/dy:              {:.4}", metrics.dp_dy);
+
+    // 5. Invert หาอัตราผลตอบแทนจากราคา Clean ด้วยวิธีของ Brent
+    let market_clean_price = 101.95;
+    let implied_ytm = plan.yield_from_clean_price(market_clean_price)?;
+    println!("Implied Market YTM: {:.4}%", implied_ytm * 100.0);
+
+    Ok(())
+}
+```
+

@@ -1,0 +1,59 @@
+---
+title: Exact Decimal Arithmetic
+description: 128-bit fixed-point decimal money representation with 38 digits and 7 rounding modes.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Floating-point numbers (`f32`, `f64`) use base-2 binary fractions, causing representation artifacts in base-10 financial math (e.g., $0.1 + 0.2 \ne 0.3$).
+
+SabiQuant provides `DecimalAmount`, a 128-bit high-integrity fixed-point arithmetic engine designed specifically for accounting, clearing, and currency settlements.
+
+## Key Specifications
+
+- **Internal Representation:** 128-bit signed integer with fixed or scaled decimal exponent.
+- **Precision:** Up to 38 decimal digits of exact precision.
+- **Zero Allocations:** Stack-allocated value type with copy semantics.
+- **Rounding Modes:** 7 standard IEEE 754 / ISO rounding strategies:
+  1. `HalfEven` (Banker's rounding - default in institutional finance)
+  2. `HalfUp` (Round half towards positive infinity)
+  3. `HalfDown` (Round half towards zero)
+  4. `Ceiling` (Round towards $+\infty$)
+  5. `Floor` (Round towards $-\infty$)
+  6. `Up` (Round away from zero)
+  7. `Down` (Truncate towards zero)
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::exact::{DecimalAmount, RoundingMode};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Parsing exact decimal strings
+    let price  = DecimalAmount::from_str("102.435000000000000000")?;
+    let factor = DecimalAmount::from_str("0.045000000000000000")?;
+
+    // Exact multiplication
+    let gross = price.checked_mul(&factor)?;
+    println!("Exact Gross: {}", gross);
+
+    // Rounding to 2 decimal places for cash settlement
+    let rounded_bankers = gross.round(2, RoundingMode::HalfEven)?;
+    let rounded_up      = gross.round(2, RoundingMode::Up)?;
+
+    println!("Half-Even (Banker's): {}", rounded_bankers);
+    println!("Round Up:             {}", rounded_up);
+
+    // Safe comparison without epsilon jitter
+    assert!(rounded_bankers <= rounded_up);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  `DecimalAmount` prevents subtle penny slippage when aggregating millions of transactions across trading desks.
+</Aside>
+

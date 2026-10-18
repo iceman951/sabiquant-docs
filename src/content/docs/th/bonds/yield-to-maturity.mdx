@@ -1,0 +1,80 @@
+---
+title: การคำนวณผลตอบแทนเมื่อครบกำหนด (Yield to Maturity Inversion)
+description: การ Invert หาอัตราผลตอบแทน YTM จากราคา Clean และ Dirty ของพันธบัตรด้วยระเบียบวิธีของ Brent
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/bonds/yield-to-maturity/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+**Yield to Maturity (YTM)** คืออัตราผลตอบแทนภายใน (Internal Rate of Return - IRR) ที่คิดลดกระแสเงินสดในอนาคตทั้งหมดของพันธบัตรให้มีมูลค่าปัจจุบันเท่ากับราคาตลาดปัจจุบัน
+
+เนื่องจากสูตรการคิดราคาพันธบัตรเป็นพหุนามอันดับสูงของตัวคูณคิดลด จึงไม่มีสูตรคำนวณแบบ Closed-form ที่จะหาค่า $y$ ได้โดยตรง และจำเป็นต้องใช้ระเบียบวิธีการคำนวณซ้ำเชิงตัวเลข (Iterative root-finding)
+
+## การกำหนดสูตรทางคณิตศาสตร์ (Mathematical Formulation)
+
+เมื่อกำหนดราคาเป้าหมายในตลาด $P^*$ เราจะสร้างฟังก์ชันเป้าหมายสำหรับการหารากของสมการ:
+
+$$f(y) = P_{\text{clean}}(y) - P^* = 0$$
+
+โดยที่:
+
+$$P_{\text{clean}}(y) = \sum_{i=1}^n A_i \, d(y, t_i) - AI$$
+
+### การหารากด้วยวิธีของ Brent-Dekker (Brent-Dekker Root Solving)
+
+การใช้วิธี Newton-Raphson แบบดั้งเดิมอาจล้มเหลวหรือลู่ออก (Diverge) หากค่าอนุพันธ์ $dP/dy$ มีความชันแบนราบ หรือในสภาวะที่อัตราผลตอบแทนต่ำหรือติดลบ SabiQuant จึงเลือกใช้ **Brent's Method** (`BrentSolver`) ซึ่งจะสลับการทำงานระหว่าง 3 วิธีโดยอัตโนมัติ:
+1. **Inverse Quadratic Interpolation:** ลู่เข้าอย่างรวดเร็วระดับ Superlinear เมื่ออยู่ใกล้รากสมการ
+2. **Secant Method:** ประมาณค่าเชิงเส้นเมื่อผลลัพธ์ของควอดราติกออกนอกขอบเขต
+3. **Bisection Method:** ระบบสำรองที่การันตีความเสถียร 100% หากการประมาณค่าไม่ทำให้ช่วงขอบเขตแคบลงเร็วพอ
+
+$$|f(y_{k})| \le \varepsilon_{\text{tol}} \quad \text{or} \quad |y_{k} - y_{k-1}| \le \delta_{\text{tol}}$$
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::bonds::BondPricingPlan;
+use sabiquant::core::{Date, Frequency};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::core::daycount::ActualActualICMA;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let settlement = Date::from_ymd(2025, 4, 1)?;
+    let maturity   = Date::from_ymd(2030, 4, 1)?;
+
+    let plan = BondPricingPlan::builder()
+        .settlement(settlement)
+        .maturity(maturity)
+        .coupon_rate(0.0375) // 3.75%
+        .frequency(Frequency::SemiAnnual)
+        .calendar(TargetCalendar::default())
+        .day_counter(ActualActualICMA::default())
+        .face_value(100.0)
+        .build()?;
+
+    // ราคา Clean ที่เสนอในตลาดรอง
+    let market_clean_price = 98.75;
+
+    // Invert หาอัตราผลตอบแทนภายใต้ช่วงการค้นหาเริ่มต้น [-10%, 100%]
+    let implied_ytm = plan.yield_from_clean_price(market_clean_price)?;
+
+    println!("Target Clean Price: {:.2}", market_clean_price);
+    println!("Implied YTM:        {:.5}%", implied_ytm * 100.0);
+
+    // ตรวจสอบความถูกต้องของการแปลงกลับ (Round-trip consistency)
+    let verified_pricing = plan.price_from_yield(implied_ytm)?;
+    println!("Repriced Clean:     {:.5}", verified_pricing.clean_price);
+    assert!((verified_pricing.clean_price - market_clean_price).abs() < 1e-6);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  SabiQuant การันตีการลู่เข้าภายในความคลาดเคลื่อนระดับ Machine Precision ($10^{-12}$) โดยใช้จำนวนรอบการคำนวณเฉลี่ยน้อยกว่า 10 ครั้งสำหรับอัตราผลตอบแทนตลาดทั่วไป
+</Aside>
+

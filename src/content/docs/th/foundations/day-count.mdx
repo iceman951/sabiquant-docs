@@ -1,0 +1,76 @@
+---
+title: ข้อตกลงการนับวัน (Day-Count Conventions)
+description: ข้อตกลงการนับวันตามมาตรฐาน ISDA และ ICMA พร้อมการทดสอบความถูกต้องเทียบเท่า QuantLib
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/foundations/day-count/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+อนุสัญญาการนับวันใช้สำหรับคำนวณสัดส่วนของปี ($\tau$) ระหว่างวันที่สองวัน $d_1$ และ $d_2$ เพื่อใช้คิดดอกเบี้ยค้างรับและตัวคูณคิดลด (Discount Factors):
+
+$$\tau(d_1, d_2) = \frac{\text{Days}(d_1, d_2)}{\text{YearBase}}$$
+
+## อนุสัญญาที่รองรับ (Supported Conventions)
+
+### 1. Actual/Actual ICMA (มาตรฐานตราสารหนี้)
+ใช้สำหรับพันธบัตรรัฐบาลและหุ้นกู้เอกชน คำนวณวันจริงเทียบกับจำนวนวันจริงในรอบการจ่ายคูปองปัจจุบัน:
+
+$$\tau(d_1, d_2) = \frac{d_2 - d_1}{f \cdot (p_2 - p_1)}$$
+
+โดย $f$ คือความถี่ในการจ่ายดอกเบี้ยต่อปี และ $[p_1, p_2]$ คือช่วงเวลาอ้างอิงของงวดคูปอง
+
+### 2. Actual/Actual ISDA (มาตรฐานสัญญา Swap)
+แบ่งการคำนวณแยกตามปีปฏิทิน:
+
+$$\tau(d_1, d_2) = \frac{\text{Days in Year}_1}{\text{Days in Year}_1 \text{ (365 or 366)}} + \frac{\text{Days in Year}_2}{\text{Days in Year}_2 \text{ (365 or 366)}}$$
+
+### 3. Actual/360 และ Actual/365 Fixed
+- **Actual/360:** มาตรฐานตลาดเงิน (ตั๋วเงินคลังสหรัฐฯ, ตราสารหนี้ระยะสั้น, ดอกเบี้ยกู้ยืม SOFR/Euribor):
+  $$\tau(d_1, d_2) = \frac{d_2 - d_1}{360}$$
+- **Actual/365 Fixed:** มาตรฐานในสหราชอาณาจักร ประเทศในเครือจักรภพ และตลาดเยน (JPY):
+  $$\tau(d_1, d_2) = \frac{d_2 - d_1}{365}$$
+
+### 4. ตระกูล 30/360 (US & Eurobond)
+กำหนดให้ทุกเดือนมี 30 วัน และหนึ่งปีมี 360 วัน:
+
+$$\text{Days} = 360(Y_2 - Y_1) + 30(M_2 - M_1) + (D_2 - D_1)$$
+
+- **30/360 US (Bond Basis):** ปรับวัน $D_1$ และ $D_2$ ตามกฎสิ้นเดือนและกฎเดือนกุมภาพันธ์
+- **30E/360 (Eurobond Basis):** หาก $D_1 = 31 \Rightarrow D_1 = 30$ และหาก $D_2 = 31 \Rightarrow D_2 = 30$
+
+### 5. Business/252
+ใช้เป็นหลักในตลาดตราสารหนี้ของบราซิลและละตินอเมริกา:
+
+$$\tau(d_1, d_2) = \frac{\text{BusinessDays}(d_1, d_2, \text{Calendar})}{252}$$
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::core::Date;
+use sabiquant::core::daycount::{
+    DayCounter, ActualActualICMA, ActualActualISDA, Actual360, Actual365Fixed, Thirty360US
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let d1 = Date::from_ymd(2024, 2, 1)?; // ปีอธิกสุรทิน (Leap year)
+    let d2 = Date::from_ymd(2024, 8, 1)?;
+
+    let act_360 = Actual360::default();
+    let act_365 = Actual365Fixed::default();
+    let thirty_360 = Thirty360US::default();
+    let isda = ActualActualISDA::default();
+
+    println!("Actual/360:     {:.6}", act_360.year_fraction(d1, d2)?);
+    println!("Actual/365:     {:.6}", act_365.year_fraction(d1, d2)?);
+    println!("30/360 US:      {:.6}", thirty_360.year_fraction(d1, d2)?);
+    println!("Act/Act ISDA:   {:.6}", isda.year_fraction(d1, d2)?);
+
+    Ok(())
+}
+```
+

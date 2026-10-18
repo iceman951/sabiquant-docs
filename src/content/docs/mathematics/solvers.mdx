@@ -1,0 +1,53 @@
+---
+title: 1D Root-Finding Solvers
+description: High-performance allocation-free 1D root solvers including Brent, Safeguarded Newton, and Bisection.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Root finding is ubiquitous across quantitative finance, from inverting yields and implied volatilities to solving clearing equilibrium prices. SabiQuant includes an allocation-free numerical solver suite.
+
+## Implemented Solvers
+
+### 1. Brent's Method (`BrentSolver`)
+Combines inverse quadratic interpolation, the secant method, and bisection. Guaranteed convergence for continuous functions where roots are bracketed $[a, b]$ with $f(a) \cdot f(b) < 0$.
+
+### 2. Safeguarded Newton-Raphson (`SafeguardedNewtonSolver`)
+Uses analytical derivative $f'(x)$ for quadratic convergence:
+
+$$x_{k+1} = x_k - \frac{f(x_k)}{f'(x_k)}$$
+
+If $x_{k+1}$ jumps outside the valid bracket $[a, b]$ or does not decrease error fast enough, the solver falls back to a bisection step.
+
+### 3. Bisection Solver (`BisectionSolver`)
+Robust, unconditionally stable $O(\log_2(1/\varepsilon))$ linear convergence method.
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::math::solvers::{BrentSolver, Solver1D};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Solve f(x) = x^3 - 2x - 5 = 0  (Known root ~ 2.09455148)
+    let f = |x: f64| x.powi(3) - 2.0 * x - 5.0;
+
+    let solver = BrentSolver::new()
+        .max_iterations(100)
+        .tolerance(1e-12);
+
+    let bracket_low = 1.0;
+    let bracket_high = 3.0;
+
+    let root = solver.solve(&f, bracket_low, bracket_high)?;
+
+    println!("Found Root: {:.12}", root);
+    println!("Residual:   {:.2e}", f(root));
+
+    assert!((f(root)).abs() < 1e-12);
+
+    Ok(())
+}
+```
+

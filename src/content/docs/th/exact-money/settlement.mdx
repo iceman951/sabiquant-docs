@@ -1,0 +1,68 @@
+---
+title: ขอบเขตการชำระราคาและสูตรการคิดเงิน (Settlement Boundary & Monetary Recipes)
+description: รูปแบบเชิงป้องกันเพื่อขจัดปัญหาการปัดเศษรั่วไหล ความแตกต่างระหว่างการปัดเศษรายส่วนเทียบกับการปัดเศษยอดรวม
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/exact-money/settlement/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+ข้อผิดพลาดคลาสสิกในวิศวกรรมการเงินคือความไม่สอดคล้องกันระหว่าง **การประเมินมูลค่าแบบต่อเนื่อง** (โมเดลคำนวณราคาด้วย `f64`) และ **การชำระราคาแบบไม่ต่อเนื่อง** (กระแสเงินสดที่ต้องลงบัญชีแยกประเภทในหน่วยเงินจริง)
+
+SabiQuant นำเสนอสถาปัตยกรรม **Settlement Boundary** ที่ชัดเจนเพื่อขจัดปัญหาเหล่านี้
+
+## ปัญหาการปัดเศษ: รายส่วน vs. ยอดรวม (Component vs. Total Dilemma)
+
+พิจารณาพอร์ตโฟลิโอที่มีการจ่ายคูปอง $N$ รายการ:
+
+1. **การปัดเศษรายส่วน (Component Rounding):** แต่ละกระแสเงินสดจะถูกปัดเศษเป็นหน่วยเงินย่อย (เช่น ทศนิยม 2 ตำแหน่งสำหรับ USD/THB) ก่อนนำมารวมกัน:
+   $$\text{Total}_{\text{comp}} = \sum_{i=1}^n \text{Round}(c_i)$$
+
+2. **การปัดเศษยอดรวม (Total Rounding):** นำยอดกระแสเงินสดดิบที่ยังไม่ปัดเศษมารวมกันจนเสร็จสิ้น แล้วจึงปัดเศษเฉพาะยอดรวมสุดท้าย:
+   $$\text{Total}_{\text{total}} = \text{Round}\left(\sum_{i=1}^n c_i\right)$$
+
+เมื่อทำธุรกรรมนับหมื่นรายการ จะพบว่า $\text{Total}_{\text{comp}} \ne \text{Total}_{\text{total}}$ ส่งผลให้เกิดข้อผิดพลาดในการตรวจสอบบัญชี
+
+---
+
+## รูปแบบสูตรการคิดเงินเชิงป้องกัน (Defensive Monetary Recipes)
+
+SabiQuant มอบ `MonetaryRecipe` และนโยบาย `SettlementPolicy` เพื่อบังคับใช้อนุสัญญาการปัดเศษที่ตกลงกันในสัญญา:
+
+```rust
+use sabiquant::exact::{DecimalAmount, RoundingMode, SettlementPolicy};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![
+        DecimalAmount::from_str("10.004")?,
+        DecimalAmount::from_str("10.004")?,
+        DecimalAmount::from_str("10.004")?,
+    ];
+
+    // นโยบาย A: Component Rounding (ปัดเศษทีละรายการก่อนรวม)
+    let sum_component: DecimalAmount = items.iter()
+        .map(|x| x.round(2, RoundingMode::HalfEven).unwrap())
+        .sum();
+
+    // นโยบาย B: Total Rounding (รวมยอดดิบก่อนแล้วปัดเศษปลายทาง)
+    let raw_sum: DecimalAmount = items.iter().cloned().sum();
+    let sum_total = raw_sum.round(2, RoundingMode::HalfEven)?;
+
+    println!("Sum of Component Rounding: {}", sum_component); // 30.00
+    println!("Rounded Total:             {}", sum_total);     // 30.01
+
+    // บังคับใช้นโยบายการชำระราคาที่ระบุไว้อย่างชัดเจน
+    let policy = SettlementPolicy::EnforceComponentRounding;
+    let finalized = policy.settle(&items, 2, RoundingMode::HalfEven)?;
+    println!("Finalized Settlement Amount: {}", finalized);
+
+    Ok(())
+}
+```
+
+<Aside type="caution">
+  ห้ามนำค่า `f64` ที่ยังไม่ปัดเศษเข้าสู่ตารางการชำระบัญชีโดยตรง ให้แปลงเป็น `DecimalAmount` ที่จุดขอบเขตการชำระราคา (Settlement Boundary) เสมอ
+</Aside>
+

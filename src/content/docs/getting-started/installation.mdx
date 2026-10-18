@@ -1,0 +1,65 @@
+---
+title: Installation & Quickstart
+description: How to install and add SabiQuant to your Rust project.
+---
+
+import { Tabs, TabItem } from '@astrojs/starlight/components';
+
+## Requirements
+
+- **Rust:** Rust 1.75.0 or newer (Stable channel)
+- **Target Platforms:** Linux, macOS, Windows, WebAssembly (`wasm32-unknown-unknown`), and bare-metal environments supporting `std`.
+
+## Adding to Your Project
+
+<Tabs>
+  <TabItem label="Cargo CLI">
+    ```bash
+    cargo add sabiquant
+    ```
+  </TabItem>
+  <TabItem label="Cargo.toml">
+    Add the dependency directly to your `Cargo.toml`:
+
+    ```toml
+    [dependencies]
+    sabiquant = "0.1.0"
+    ```
+  </TabItem>
+</Tabs>
+
+## Verification Example
+
+Create a simple `main.rs` to verify that SabiQuant is installed and functioning correctly:
+
+```rust
+use sabiquant::core::Date;
+use sabiquant::core::calendars::{Calendar, TargetCalendar};
+use sabiquant::exact::DecimalAmount;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Check Date manipulation
+    let date = Date::from_ymd(2025, 1, 1)?;
+    let calendar = TargetCalendar::default();
+    
+    // New Year's Day is a TARGET holiday
+    println!("Is {} a business day? {}", date, calendar.is_business_day(date));
+
+    // Next business day roll
+    let next_bday = calendar.adjust(date, sabiquant::core::BusinessDayConvention::Following);
+    println!("Adjusted date (Following): {}", next_bday);
+
+    // Exact decimal money calculation
+    let amount = DecimalAmount::from_str("1234567.890123456789")?;
+    println!("Exact amount: {}", amount);
+
+    Ok(())
+}
+```
+
+Run the application:
+
+```bash
+cargo run
+```
+

@@ -1,0 +1,52 @@
+---
+title: Cashflows & Legs
+description: Modeling discrete cashflows, fixed coupon streams, and multi-leg financial contracts.
+---
+
+In SabiQuant, complex financial contracts (such as fixed rate bonds, floating rate notes, and interest rate swaps) are composed of one or more **Legs**, each containing ordered **Cashflows**.
+
+## Cashflow Types
+
+- **`SimpleCashFlow`:** A single bullet payment (e.g. principal redemption) at a specific date.
+- **`FixedRateCoupon`:** An interest coupon computed as $\text{Notional} \times \text{Rate} \times \tau$, where $\tau$ is the day-count year fraction over the accrual period.
+
+## Net Present Value (NPV)
+
+The present value of a leg given discount factors $d(t_i)$ is:
+
+$$\text{NPV} = \sum_{i=1}^n c_i \cdot d(t_i)$$
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::core::Date;
+use sabiquant::schedules::{Leg, SimpleCashFlow, FixedRateCoupon};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixed_leg = Leg::new();
+
+    // Add scheduled coupon cash flows
+    let c1_date = Date::from_ymd(2025, 6, 30)?;
+    let c2_date = Date::from_ymd(2025, 12, 31)?;
+    let maturity = Date::from_ymd(2025, 12, 31)?;
+
+    // Two semi-annual coupons of $25,000 on a $1,000,000 notional (5.0% annual)
+    fixed_leg.push(SimpleCashFlow::new(c1_date, 25_000.0));
+    fixed_leg.push(SimpleCashFlow::new(c2_date, 25_000.0));
+
+    // Principal repayment at maturity
+    fixed_leg.push(SimpleCashFlow::new(maturity, 1_000_000.0));
+
+    // Valuation parameters
+    let settlement = Date::from_ymd(2025, 1, 1)?;
+    let discount_rate = 0.048; // 4.8% flat annual rate
+
+    let npv = fixed_leg.npv(settlement, discount_rate)?;
+    println!("Total Leg NPV: ${:.2}", npv);
+
+    Ok(())
+}
+```
+

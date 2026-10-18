@@ -1,0 +1,70 @@
+---
+title: Day-Count Conventions
+description: ISDA and ICMA standard day-count conventions with verified QuantLib parity.
+---
+
+Day-count conventions determine the fraction of a year ($\tau$) between two dates $d_1$ and $d_2$, governing interest accrual and discount factors:
+
+$$\tau(d_1, d_2) = \frac{\text{Days}(d_1, d_2)}{\text{YearBase}}$$
+
+## Supported Conventions
+
+### 1. Actual/Actual ICMA (Bond Standard)
+Used for sovereign and corporate bonds. Calculates accrual relative to the actual number of days in the current coupon period:
+
+$$\tau(d_1, d_2) = \frac{d_2 - d_1}{f \cdot (p_2 - p_1)}$$
+
+where $f$ is the payment frequency and $[p_1, p_2]$ is the reference coupon period.
+
+### 2. Actual/Actual ISDA (Swap Standard)
+Splits calculation across calendar years:
+
+$$\tau(d_1, d_2) = \frac{\text{Days in Year}_1}{\text{Days in Year}_1 \text{ (365 or 366)}} + \frac{\text{Days in Year}_2}{\text{Days in Year}_2 \text{ (365 or 366)}}$$
+
+### 3. Actual/360 & Actual/365 Fixed
+- **Actual/360:** Standard in money markets (US Treasury bills, commercial paper, SOFR/Euribor loans):
+  $$\tau(d_1, d_2) = \frac{d_2 - d_1}{360}$$
+- **Actual/365 Fixed:** Standard in UK, Commonwealth, and JPY markets:
+  $$\tau(d_1, d_2) = \frac{d_2 - d_1}{365}$$
+
+### 4. 30/360 Family (US & Eurobond)
+Treats all full months as 30 days and a year as 360 days:
+
+$$\text{Days} = 360(Y_2 - Y_1) + 30(M_2 - M_1) + (D_2 - D_1)$$
+
+- **30/360 US (Bond Basis):** Adjusts $D_1$ and $D_2$ based on end-of-month and February rules.
+- **30E/360 (Eurobond Basis):** If $D_1 = 31 \Rightarrow D_1 = 30$; if $D_2 = 31 \Rightarrow D_2 = 30$.
+
+### 5. Business/252
+Used primarily in Brazilian and Latin American fixed income:
+
+$$\tau(d_1, d_2) = \frac{\text{BusinessDays}(d_1, d_2, \text{Calendar})}{252}$$
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::core::Date;
+use sabiquant::core::daycount::{
+    DayCounter, ActualActualICMA, ActualActualISDA, Actual360, Actual365Fixed, Thirty360US
+};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let d1 = Date::from_ymd(2024, 2, 1)?; // Leap year
+    let d2 = Date::from_ymd(2024, 8, 1)?;
+
+    let act_360 = Actual360::default();
+    let act_365 = Actual365Fixed::default();
+    let thirty_360 = Thirty360US::default();
+    let isda = ActualActualISDA::default();
+
+    println!("Actual/360:     {:.6}", act_360.year_fraction(d1, d2)?);
+    println!("Actual/365:     {:.6}", act_365.year_fraction(d1, d2)?);
+    println!("30/360 US:      {:.6}", thirty_360.year_fraction(d1, d2)?);
+    println!("Act/Act ISDA:   {:.6}", isda.year_fraction(d1, d2)?);
+
+    Ok(())
+}
+```
+

@@ -1,0 +1,76 @@
+---
+title: Yield to Maturity (YTM) Inversion
+description: Robust yield inversion from market clean and dirty bond prices using Brent's method.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Yield to Maturity (YTM) is the internal rate of return (IRR) that equates the present value of all future cash flows of a bond to its current market price.
+
+Because the bond pricing formula is a high-degree polynomial in the discount factor, there is no closed-form analytical solution for $y$. It must be solved iteratively.
+
+## Mathematical Formulation
+
+Given a target market price $P^*$, we define the objective root-finding function:
+
+$$f(y) = P_{\text{clean}}(y) - P^* = 0$$
+
+where:
+
+$$P_{\text{clean}}(y) = \sum_{i=1}^n A_i \, d(y, t_i) - AI$$
+
+### Brent-Dekker Root Solving
+
+Standard Newton-Raphson iterations can fail or diverge if the derivative $dP/dy$ becomes flat or in low-yield/negative-yield environments. SabiQuant uses **Brent's Method** (`BrentSolver`), which dynamically switches between:
+1. **Inverse Quadratic Interpolation:** Rapid superlinear convergence near the root.
+2. **Secant Method:** Linear interpolation step when inverse quadratic is out of bounds.
+3. **Bisection Method:** Strict failsafe when interpolation steps do not shrink the bracket sufficiently.
+
+$$|f(y_{k})| \le \varepsilon_{\text{tol}} \quad \text{or} \quad |y_{k} - y_{k-1}| \le \delta_{\text{tol}}$$
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::bonds::BondPricingPlan;
+use sabiquant::core::{Date, Frequency};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::core::daycount::ActualActualICMA;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let settlement = Date::from_ymd(2025, 4, 1)?;
+    let maturity   = Date::from_ymd(2030, 4, 1)?;
+
+    let plan = BondPricingPlan::builder()
+        .settlement(settlement)
+        .maturity(maturity)
+        .coupon_rate(0.0375) // 3.75%
+        .frequency(Frequency::SemiAnnual)
+        .calendar(TargetCalendar::default())
+        .day_counter(ActualActualICMA::default())
+        .face_value(100.0)
+        .build()?;
+
+    // Target clean price quoted in the secondary market
+    let market_clean_price = 98.75;
+
+    // Invert yield with default robust convergence bounds [-10%, 100%]
+    let implied_ytm = plan.yield_from_clean_price(market_clean_price)?;
+
+    println!("Target Clean Price: {:.2}", market_clean_price);
+    println!("Implied YTM:        {:.5}%", implied_ytm * 100.0);
+
+    // Verify round-trip pricing consistency
+    let verified_pricing = plan.price_from_yield(implied_ytm)?;
+    println!("Repriced Clean:     {:.5}", verified_pricing.clean_price);
+    assert!((verified_pricing.clean_price - market_clean_price).abs() < 1e-6);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  SabiQuant guarantees convergence to within machine-level numerical tolerances ($10^{-12}$) in fewer than 10 iterations for standard market yields.
+</Aside>
+

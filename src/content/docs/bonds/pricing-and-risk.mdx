@@ -1,0 +1,135 @@
+---
+title: Fixed Income Pricing & Risk Analytics
+description: Comprehensive guide to bond pricing, dirty and clean price decomposition, and analytical risk measures in SabiQuant.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Fixed-income instruments form the bedrock of institutional quantitative finance. SabiQuant provides an analytical bond valuation engine built on `std` with zero external dependencies and numerical parity verified against QuantLib.
+
+## Mathematical Formulation
+
+### 1. Dirty Price Valuation
+
+For a bond with cash flows $A_i$ (coupons and face value redemption) payable at times $t_i$ (measured in years from settlement according to the chosen day-count convention), the dirty (full) price $P(y)$ given a compounded annual yield to maturity $y$ with compounding frequency $m$ is expressed as:
+
+$$P(y) = \sum_{i=1}^n A_i \, d(y, t_i)$$
+
+where the discount factor $d(y, t_i)$ depends on the compounding convention:
+
+- **Periodic Compounding ($m$ times per year):**
+  $$d(y, t_i) = \left( 1 + \frac{y}{m} \right)^{-m \cdot t_i}$$
+
+- **Continuous Compounding:**
+  $$d(y, t_i) = e^{-y \cdot t_i}$$
+
+### 2. Clean Price and Accrued Interest
+
+Market trading conventions quote bond prices as **Clean Price** ($P_{\text{clean}}$), removing the accrued interest ($AI$) that accumulates between coupon payment dates:
+
+$$P_{\text{dirty}} = P_{\text{clean}} + AI$$
+
+Accrued interest is computed from the previous coupon date $t_{\text{prev}}$, settlement date $t_{\text{settle}}$, and next coupon date $t_{\text{next}}$:
+
+$$AI = C \times \frac{\text{DayCount}(t_{\text{prev}}, t_{\text{settle}})}{\text{DayCount}(t_{\text{prev}}, t_{\text{next}})}$$
+
+where $C$ is the gross coupon payment for the period.
+
+### 3. Analytical Risk Measures
+
+Rather than relying on finite-difference approximations ($\Delta y \approx 1\text{bp}$) which introduce numerical truncation error, SabiQuant calculates **exact analytical derivatives**:
+
+$$D_{\text{mod}} = -\frac{1}{P} \frac{dP}{dy}, \quad C = \frac{1}{P} \frac{d^2P}{dy^2}$$
+
+#### First Derivative ($dP/dy$) and Modified Duration
+$$\frac{dP}{dy} = -\sum_{i=1}^n t_i \, A_i \left( 1 + \frac{y}{m} \right)^{-(m \cdot t_i + 1)}$$
+
+$$D_{\text{mac}} = \frac{1}{P} \sum_{i=1}^n t_i \, A_i \, d(y, t_i)$$
+
+$$D_{\text{mod}} = \frac{D_{\text{mac}}}{1 + \frac{y}{m}}$$
+
+#### Second Derivative ($d^2P/dy^2$) and Convexity
+$$\frac{d^2P}{dy^2} = \sum_{i=1}^n t_i \left( t_i + \frac{1}{m} \right) A_i \left( 1 + \frac{y}{m} \right)^{-(m \cdot t_i + 2)}$$
+
+$$C = \frac{1}{P} \frac{d^2P}{dy^2}$$
+
+<Aside type="tip">
+  By computing $dP/dy$ and $d^2P/dy^2$ analytically, SabiQuant delivers machine-precision Taylor series expansions for bond price shifts:
+  $$\frac{\Delta P}{P} \approx -D_{\text{mod}} \Delta y + \frac{1}{2} C (\Delta y)^2$$
+</Aside>
+
+---
+
+## Practical Rust Example
+
+Below is a complete, production-ready example demonstrating how to construct a `BondPricingPlan` and extract pricing and risk metrics.
+
+```rust
+use sabiquant::bonds::{BondPricingPlan, BondPricingResult};
+use sabiquant::core::{Date, Frequency};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::core::daycount::ActualActualICMA;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. Establish settlement date and bond maturity
+    let settlement = Date::from_ymd(2025, 6, 15)?;
+    let maturity   = Date::from_ymd(2035, 6, 15)?;
+
+    // 2. Instantiate market calendar and day-count convention
+    let calendar = TargetCalendar::default();
+    let day_counter = ActualActualICMA::default();
+
+    // 3. Build the BondPricingPlan
+    // 10-year 5.00% semi-annual bond, par = 100.0
+    let plan = BondPricingPlan::builder()
+        .settlement(settlement)
+        .maturity(maturity)
+        .coupon_rate(0.050) // 5.00%
+        .frequency(Frequency::SemiAnnual)
+        .calendar(calendar)
+        .day_counter(day_counter)
+        .face_value(100.0)
+        .build()?;
+
+    // 4. Calculate pricing and risk at 4.75% yield
+    let yield_to_maturity = 0.0475;
+    let metrics: BondPricingResult = plan.price_from_yield(yield_to_maturity)?;
+
+    println!("================ BOND VALUATION ================");
+    println!("Dirty Price:        ${:.5}", metrics.dirty_price);
+    println!("Clean Price:        ${:.5}", metrics.clean_price);
+    println!("Accrued Interest:   ${:.5}", metrics.accrued_interest);
+    println!("Macaulay Duration:  {:.4} years", metrics.macaulay_duration);
+    println!("Modified Duration:  {:.4}", metrics.modified_duration);
+    println!("Convexity:          {:.4}", metrics.convexity);
+    println!("dP/dy (DV01 base):  {:.4}", metrics.dp_dy);
+    println!("================================================");
+
+    // 5. Inverting Yield from Market Clean Price
+    // Using Brent's robust root-finding method under the hood
+    let market_clean_price = 101.95;
+    let implied_ytm = plan.yield_from_clean_price(market_clean_price)?;
+    println!("Implied Market YTM: {:.4}%", implied_ytm * 100.0);
+
+    Ok(())
+}
+```
+
+---
+
+## Output Metrics Reference
+
+| Metric | Type | Description |
+| :--- | :--- | :--- |
+| `dirty_price` | `f64` | Full settlement price including accrued coupon ($P_{\text{dirty}}$) |
+| `clean_price` | `f64` | Quoted market price excluding accrued coupon ($P_{\text{clean}}$) |
+| `accrued_interest` | `f64` | Accrued coupon earned from last payment date to settlement |
+| `macaulay_duration` | `f64` | Weighted average maturity of cash flows in years ($D_{\text{mac}}$) |
+| `modified_duration` | `f64` | Percentage price sensitivity per unit change in yield ($D_{\text{mod}}$) |
+| `convexity` | `f64` | Second derivative curvature measure ($C$) |
+| `dp_dy` | `f64` | Direct analytical first derivative $\frac{dP}{dy}$ |
+
+<Aside type="note">
+  All calculations in SabiQuant are strictly allocation-free during evaluation runs, making `BondPricingPlan` ideal for batch pricing tens of thousands of bond portfolios in ultra-low latency trading pipelines.
+</Aside>
+

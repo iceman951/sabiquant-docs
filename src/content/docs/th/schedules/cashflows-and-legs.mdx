@@ -1,0 +1,58 @@
+---
+title: กระแสเงินสดและสัญญา (Cashflows & Legs)
+description: การจำลองกระแสเงินสดไม่ต่อเนื่อง ชุดกระแสคูปองคงที่ และสัญญาทางการเงินแบบหลายขา (Multi-leg)
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/schedules/cashflows-and-legs/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+ใน SabiQuant สัญญาทางการเงินที่ซับซ้อน (เช่น พันธบัตรอัตราดอกเบี้ยคงที่, หุ้นกู้ลอยตัว, และสัญญาแลกเปลี่ยนอัตราดอกเบี้ย Interest Rate Swaps) จะประกอบขึ้นจาก **Leg** ตั้งแต่หนึ่งขาขึ้นไป โดยแต่ละ Leg จะบรรจุชุดของ **Cashflow** ที่เรียงตามลำดับเวลา
+
+## ชนิดของกระแสเงินสด (Cashflow Types)
+
+- **`SimpleCashFlow`:** การจ่ายเงินก้อนเดี่ยว ณ วันที่ระบุ (เช่น การจ่ายคืนเงินต้นเมื่อครบกำหนด)
+- **`FixedRateCoupon`:** คูปองดอกเบี้ย คำนวณจาก $\text{Notional} \times \text{Rate} \times \tau$ โดย $\tau$ คือสัดส่วนปีตามอนุสัญญาการนับวันตลอดงวดการสะสมดอกเบี้ย
+
+## มูลค่าปัจจุบันสุทธิ (Net Present Value - NPV)
+
+มูลค่าปัจจุบันของ Leg เมื่อกำหนดตัวคูณคิดลด $d(t_i)$:
+
+$$\text{NPV} = \sum_{i=1}^n c_i \cdot d(t_i)$$
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::core::Date;
+use sabiquant::schedules::{Leg, SimpleCashFlow, FixedRateCoupon};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut fixed_leg = Leg::new();
+
+    // เพิ่มกระแสเงินสดคูปองตามกำหนด
+    let c1_date = Date::from_ymd(2025, 6, 30)?;
+    let c2_date = Date::from_ymd(2025, 12, 31)?;
+    let maturity = Date::from_ymd(2025, 12, 31)?;
+
+    // คูปองจ่ายทุกครึ่งปี 2 งวด งวดละ $25,000 บนเงินต้น $1,000,000 (ดอกเบี้ย 5.0% ต่อปี)
+    fixed_leg.push(SimpleCashFlow::new(c1_date, 25_000.0));
+    fixed_leg.push(SimpleCashFlow::new(c2_date, 25_000.0));
+
+    // จ่ายคืนเงินต้นเมื่อครบกำหนด
+    fixed_leg.push(SimpleCashFlow::new(maturity, 1_000_000.0));
+
+    // พารามิเตอร์การประเมินมูลค่า
+    let settlement = Date::from_ymd(2025, 1, 1)?;
+    let discount_rate = 0.048; // อัตราคิดลดคงที่ 4.8% ต่อปี
+
+    let npv = fixed_leg.npv(settlement, discount_rate)?;
+    println!("Total Leg NPV: ${:.2}", npv);
+
+    Ok(())
+}
+```
+

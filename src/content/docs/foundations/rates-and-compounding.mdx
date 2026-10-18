@@ -1,0 +1,66 @@
+---
+title: Interest Rates & Compounding
+description: Discount factors, compounding rules, and equivalent rate conversions.
+---
+
+Interest rate mathematics translates nominal rates into time value of money discount factors and compound factors.
+
+## Compounding Conventions
+
+Given annual interest rate $r$ and year fraction $t$:
+
+### 1. Compounded ($m$ times per year)
+$$C(r, t) = \left( 1 + \frac{r}{m} \right)^{m \cdot t}, \quad d(r, t) = \frac{1}{C(r, t)} = \left( 1 + \frac{r}{m} \right)^{-m \cdot t}$$
+
+### 2. Continuous Compounding
+$$C(r, t) = e^{r \cdot t}, \quad d(r, t) = e^{-r \cdot t}$$
+
+### 3. Simple Compounding
+$$C(r, t) = 1 + r \cdot t, \quad d(r, t) = \frac{1}{1 + r \cdot t}$$
+
+### 4. Simple Then Compounded
+Used for money market discount instruments with stub periods: simple interest for $t \le 1/m$, compounded thereafter.
+
+---
+
+## Equivalent Rate Conversions
+
+To convert a rate $r_1$ with frequency $m_1$ to an equivalent rate $r_2$ with frequency $m_2$ such that their discount factors match:
+
+$$\left( 1 + \frac{r_1}{m_1} \right)^{m_1} = \left( 1 + \frac{r_2}{m_2} \right)^{m_2}$$
+
+$$r_2 = m_2 \left[ \left( 1 + \frac{r_1}{m_1} \right)^{\frac{m_1}{m_2}} - 1 \right]$$
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::core::rates::{InterestRate, Compounding};
+use sabiquant::core::Frequency;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 5.0% semi-annually compounded rate
+    let rate = InterestRate::new(0.05, Compounding::Compounded, Frequency::SemiAnnual);
+
+    let time = 2.5; // 2.5 years
+
+    // Compound and discount factors
+    let compound_factor = rate.compound_factor(time);
+    let discount_factor = rate.discount_factor(time);
+
+    println!("Compound Factor (2.5Y): {:.6}", compound_factor);
+    println!("Discount Factor (2.5Y): {:.6}", discount_factor);
+
+    // Convert to equivalent continuously compounded rate
+    let continuous_rate = rate.equivalent_rate(Compounding::Continuous, Frequency::Annual, time)?;
+    println!("Continuous Equivalent:  {:.5}%", continuous_rate.rate() * 100.0);
+
+    // Convert to quarterly compounded rate
+    let quarterly_rate = rate.equivalent_rate(Compounding::Compounded, Frequency::Quarterly, time)?;
+    println!("Quarterly Equivalent:   {:.5}%", quarterly_rate.rate() * 100.0);
+
+    Ok(())
+}
+```
+

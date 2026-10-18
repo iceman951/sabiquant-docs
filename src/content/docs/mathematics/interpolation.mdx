@@ -1,0 +1,53 @@
+---
+title: Interpolation & Curve Fitting
+description: Curve interpolation schemes including Linear, Natural Cubic Spline, and Monotonic PCHIP Hermite.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Yield curves and volatility surfaces require interpolation between discrete market pillars (e.g., 1M, 3M, 6M, 1Y, 5Y, 10Y, 30Y).
+
+## Interpolation Schemes
+
+### 1. Linear Interpolation (`LinearInterpolator`)
+Continuous piecewise linear function ($C^0$ continuous). Fast and monotonic, but non-smooth at knot points.
+
+### 2. Natural Cubic Spline (`CubicSpline`)
+Twice continuously differentiable ($C^2$ continuous). Minimizes curvature across the knot points:
+
+$$S''(x_0) = S''(x_n) = 0$$
+
+### 3. PCHIP Hermite (`PchipInterpolator`)
+Piecewise Cubic Hermite Interpolating Polynomial. **Shape-preserving and strictly monotonic**—prevents the artificial oscillatory overshoots that standard cubic splines introduce into discount factors and forward rates.
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::math::interpolation::{LinearInterpolator, PchipInterpolator, Interpolator1D};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Zero curve pillars: [Maturity in years, Zero rate %]
+    let maturities = vec![0.5, 1.0, 2.0, 5.0, 10.0, 30.0];
+    let zero_rates = vec![0.035, 0.038, 0.041, 0.045, 0.048, 0.051];
+
+    // Monotonic PCHIP Hermite curve
+    let pchip = PchipInterpolator::new(&maturities, &zero_rates)?;
+
+    // Query rate at 3.5 years
+    let rate_3_5y = pchip.interpolate(3.5)?;
+    println!("Interpolated 3.5Y Zero Rate: {:.4}%", rate_3_5y * 100.0);
+
+    // First derivative (forward rate proxy)
+    let slope = pchip.derivative(3.5)?;
+    println!("Curve Slope (dRate/dt):      {:.6}", slope);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  For discount curves and cumulative probability functions, always use **PCHIP** rather than unconstrained cubic splines to preserve monotonicity and avoid negative forward rates.
+</Aside>
+

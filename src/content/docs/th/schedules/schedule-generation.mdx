@@ -1,0 +1,62 @@
+---
+title: การสร้างตารางเวลา (Schedule Generation)
+description: การสร้างตารางเวลากระแสเงินสด พร้อมการจัดการช่วงเศษงวด (Stubs) การเลื่อนสิ้นเดือน (EOM) และรอบวัน IMM
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/schedules/schedule-generation/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+สัญญาทางการเงิน (Swaps, พันธบัตร, เงินกู้) ต้องการตารางการชำระดอกเบี้ยและวันที่สะสมดอกเบี้ยที่แม่นยำ `ScheduleBuilder` ใน SabiQuant ได้รับการพัฒนาตามอัลกอริทึมสร้างตารางเวลาของมาตรฐาน ISDA อย่างครบถ้วน
+
+## ตัวเลือกในการสร้างตารางเวลา (Generation Options)
+
+ตารางเวลาจะถูกสร้างขึ้นระหว่างวันเริ่มต้นมีผล (Effective Date) และวันครบกำหนดสิ้นสุด (Termination Date):
+
+- **Tenor:** ช่วงก้าวของรอบเวลา (เช่น 3M, 6M, 1Y)
+- **Calendar & Adjustment:** การเลื่อนวันหยุดตามปฏิทินตลาด
+- **Stub Conventions (อนุสัญญาเศษงวด):**
+  - `ShortFront` / `LongFront`: เศษงวดสั้นหรือยาวในงวดแรก
+  - `ShortBack` / `LongBack`: เศษงวดสั้นหรือยาวในงวดสุดท้าย
+- **Roll Conventions (อนุสัญญาการเลื่อนวันที่):**
+  - `EndOfMonth`: เลื่อนไปยังวันสุดท้ายของเดือนเสมอ หากวันเริ่มต้นเป็นวันสิ้นเดือน
+  - `IMM`: เลื่อนไปยังวัน International Monetary Market (วันพุธที่ 3 ของเดือนมีนาคม, มิถุนายน, กันยายน, และธันวาคม)
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::core::{Date, Period, TimeUnit, Frequency, BusinessDayConvention};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::schedules::{ScheduleBuilder, StubConvention};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let effective_date   = Date::from_ymd(2025, 2, 15)?;
+    let termination_date = Date::from_ymd(2028, 8, 15)?;
+
+    let calendar = TargetCalendar::default();
+
+    // สร้างตารางจ่ายคูปองทุก 6 เดือน พร้อมจัดการเศษงวดสั้นงวดแรก (Short Front stub)
+    let schedule = ScheduleBuilder::new()
+        .effective_date(effective_date)
+        .termination_date(termination_date)
+        .tenor(Period::new(6, TimeUnit::Months))
+        .calendar(calendar)
+        .convention(BusinessDayConvention::ModifiedFollowing)
+        .termination_convention(BusinessDayConvention::ModifiedFollowing)
+        .stub_convention(StubConvention::ShortFront)
+        .end_of_month(false)
+        .build()?;
+
+    println!("Schedule contains {} dates:", schedule.len());
+    for (i, date) in schedule.dates().iter().enumerate() {
+        println!("  Period {}: {}", i, date);
+    }
+
+    Ok(())
+}
+```
+

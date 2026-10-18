@@ -1,0 +1,69 @@
+---
+title: การติดตั้งและเริ่มต้นใช้งาน (Installation & Quickstart)
+description: วิธีการติดตั้งและเพิ่ม SabiQuant เข้าสู่โปรเจกต์ Rust ของคุณ
+---
+
+import { Tabs, TabItem, Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/getting-started/installation/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+## ความต้องการของระบบ (Requirements)
+
+- **Rust:** Rust 1.75.0 ขึ้นไป (Stable channel)
+- **Target Platforms:** Linux, macOS, Windows, WebAssembly (`wasm32-unknown-unknown`), รวมถึงสภาพแวดล้อม Bare-metal ที่รองรับ `std`
+
+## การเพิ่ม SabiQuant ลงในโปรเจกต์
+
+<Tabs>
+  <TabItem label="Cargo CLI">
+    ```bash
+    cargo add sabiquant
+    ```
+  </TabItem>
+  <TabItem label="Cargo.toml">
+    เพิ่ม dependencies ลงในไฟล์ `Cargo.toml` โดยตรง:
+
+    ```toml
+    [dependencies]
+    sabiquant = "0.1.0"
+    ```
+  </TabItem>
+</Tabs>
+
+## ตัวอย่างการตรวจสอบความพร้อมใช้งาน (Verification Example)
+
+สร้างไฟล์ `main.rs` แบบง่ายเพื่อทดสอบการทำงานของ SabiQuant:
+
+```rust
+use sabiquant::core::Date;
+use sabiquant::core::calendars::{Calendar, TargetCalendar};
+use sabiquant::exact::DecimalAmount;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. ตรวจสอบการจัดการวันที่
+    let date = Date::from_ymd(2025, 1, 1)?;
+    let calendar = TargetCalendar::default();
+    
+    // วันขึ้นปีใหม่เป็นวันหยุดของระบบ TARGET
+    println!("Is {} a business day? {}", date, calendar.is_business_day(date));
+
+    // เลื่อนวันทำการถัดไป (Following)
+    let next_bday = calendar.adjust(date, sabiquant::core::BusinessDayConvention::Following);
+    println!("Adjusted date (Following): {}", next_bday);
+
+    // 2. คำนวณเงินทศนิยมแน่นอน (Exact decimal money)
+    let amount = DecimalAmount::from_str("1234567.890123456789")?;
+    println!("Exact amount: {}", amount);
+
+    Ok(())
+}
+```
+
+รันแอปพลิเคชัน:
+
+```bash
+cargo run
+```
+

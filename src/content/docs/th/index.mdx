@@ -1,0 +1,119 @@
+---
+title: เอกสารคู่มือ SabiQuant
+description: ไลบรารี Quantitative Finance ความแม่นยำสูงในภาษา Rust แบบ std-only ไม่มี external dependencies พร้อมความถูกต้องระดับเดียวกับ QuantLib
+template: splash
+hero:
+  tagline: ไลบรารี Quantitative Finance ความแม่นยำสูงในภาษา Rust แบบ zero-dependency (std-only) ได้รับการตรวจสอบความถูกต้องเชิงตัวเลขเทียบเท่า QuantLib
+  actions:
+    - text: เริ่มต้นใช้งาน
+      link: /sabiquant-docs/th/getting-started/overview/
+      icon: right-arrow
+      variant: primary
+    - text: คู่มือการคำนวณราคาพันธบัตร
+      link: /sabiquant-docs/th/bonds/pricing-and-risk/
+      icon: document
+      variant: secondary
+    - text: ดูบน GitHub
+      link: https://github.com/iceman951/sabiquant
+      icon: external
+      variant: minimal
+---
+
+import { Card, CardGrid } from '@astrojs/starlight/components';
+
+<div class="hero-badges">
+  <a href="https://crates.io/crates/sabiquant" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/crates/v/sabiquant.svg?style=flat-square&color=orange" alt="เวอร์ชันบน Crates.io" />
+  </a>
+  <a href="https://docs.rs/sabiquant" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/docs.rs-sabiquant-blue.svg?style=flat-square" alt="docs.rs เอกสารคู่มือ" />
+  </a>
+  <a href="https://github.com/iceman951/sabiquant" target="_blank" rel="noopener noreferrer">
+    <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-green.svg?style=flat-square" alt="สัญญาอนุญาต" />
+  </a>
+  <span>
+    <img src="https://img.shields.io/badge/dependencies-zero%20(std--only)-brightgreen.svg?style=flat-square" alt="การพึ่งพาไลบรารีภายนอก" />
+  </span>
+</div>
+
+## เสาหลักทางสถาปัตยกรรม (Core Architectural Pillars)
+
+<CardGrid stagger>
+  <Card title="Zero Dependencies (std-only)" icon="rocket">
+    สร้างขึ้นบน Rust Standard Library (`std`) 100% ปราศจาก external crate ใดๆ คอมไพล์ได้เร็วในระดับมิลลิวินาที ใช้งานได้ทุกระบบตั้งแต่ Microservices, WebAssembly จนถึงระบบจำกัดทรัพยากร
+  </Card>
+  <Card title="QuantLib Parity" icon="approve-check-circle">
+    ทดสอบและเทียบเคียงกับชุดทดสอบของ QuantLib มั่นใจได้ในความถูกต้องเชิงตัวเลขของอนุสัญญา ISDA/ICMA, Actual/Actual ICMA day counts, ปฏิทินวันหยุดตลาด และรอบดอกเบี้ยไม่เต็มงวด (stubs)
+  </Card>
+  <Card title="Exact Decimal & Settlement" icon="seti:salesforce">
+    การคำนวณเงินทศนิยมแน่นอนขนาด 128-bit (`DecimalAmount`) ละเอียด 38 ตำแหน่ง พร้อมโหมดการปัดเศษมาตรฐาน 7 รูปแบบ มีระบบป้องกันข้อผิดพลาดการชำระราคาและตัดปัญหาเศษสตางค์คลาดเคลื่อน
+  </Card>
+  <Card title="Deep Analytical Risk" icon="chart">
+    คำนวณตัวชี้วัดความเสี่ยงลำดับที่ 1 และ 2 แบบ Analytical: Modified Duration, Macaulay Duration, Convexity, และ $dP/dy$ แม่นยำตรงตามสูตรคณิตศาสตร์โดยไม่มีสัญญาณรบกวนจากการประมาณค่า
+  </Card>
+</CardGrid>
+
+---
+
+## ตัวอย่างโค้ดอย่างย่อ: การประเมินมูลค่าตราสารหนี้
+
+คำนวณราคา Clean, ราคา Dirty, ดอกเบี้ยค้างรับ (Accrued Interest), และวิเคราะห์ความเสี่ยงด้วย SabiQuant:
+
+```rust
+use sabiquant::bonds::{BondPricingPlan, BondPricingResult};
+use sabiquant::core::{Date, Frequency};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::core::daycount::ActualActualICMA;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 1. กำหนดวันชำระราคาและวันครบกำหนดไถ่ถอน
+    let settlement = Date::from_ymd(2025, 3, 15)?;
+    let maturity   = Date::from_ymd(2035, 3, 15)?;
+
+    // 2. สร้างแบบแผนการคำนวณราคาพันธบัตร (อายุ 10 ปี, คูปอง 4.5% ต่อปี)
+    let plan = BondPricingPlan::builder()
+        .settlement(settlement)
+        .maturity(maturity)
+        .coupon_rate(0.045)
+        .frequency(Frequency::Annual)
+        .calendar(TargetCalendar::default())
+        .day_counter(ActualActualICMA::default())
+        .face_value(100.0)
+        .build()?;
+
+    // 3. คำนวณราคาที่อัตราผลตอบแทนตลาด 4.20%
+    let market_yield = 0.042;
+    let pricing: BondPricingResult = plan.price_from_yield(market_yield)?;
+
+    println!("Dirty Price:       {:.4}", pricing.dirty_price);
+    println!("Clean Price:       {:.4}", pricing.clean_price);
+    println!("Accrued Interest:  {:.4}", pricing.accrued_interest);
+    println!("Modified Duration: {:.4}", pricing.modified_duration);
+    println!("Convexity:         {:.4}", pricing.convexity);
+
+    // 4. Invert หาอัตราผลตอบแทนจากราคา Clean ในตลาด
+    let target_clean_price = 102.435;
+    let implied_yield = plan.yield_from_clean_price(target_clean_price)?;
+    println!("Implied Yield:     {:.4}%", implied_yield * 100.0);
+
+    Ok(())
+}
+```
+
+---
+
+## การติดตั้ง
+
+เพิ่ม SabiQuant ลงใน `Cargo.toml`:
+
+```toml
+[dependencies]
+sabiquant = "0.1.0"
+```
+
+หรือใช้คำสั่งผ่าน Command Line:
+
+```bash
+cargo add sabiquant
+```
+

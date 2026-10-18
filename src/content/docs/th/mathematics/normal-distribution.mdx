@@ -1,0 +1,65 @@
+---
+title: การแจกแจงแบบปกติ (Normal Distribution)
+description: ฟังก์ชัน PDF, CDF, และ Inverse CDF (Quantile) ของการแจกแจงแบบปกติความแม่นยำสูง พัฒนาบน std โดยปราศจาก dependencies ภายนอก
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/mathematics/normal-distribution/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+การคำนวณราคาออปชันเชิงวิเคราะห์ (Black-Scholes-Merton, Bachelier) และการคำนวณมูลค่าความเสี่ยง (Value-at-Risk - VaR) ต้องใช้ฟังก์ชันความน่าจะเป็นของการแจกแจงปกติมาตรฐานที่มีความละเอียดถึงระดับ Machine Epsilon
+
+## ฟังก์ชันทางคณิตศาสตร์ (Mathematical Functions)
+
+### 1. ฟังก์ชันความหนาแน่นของความน่าจะเป็น (PDF)
+$$\phi(x) = \frac{1}{\sqrt{2\pi}} e^{-\frac{1}{2} x^2}$$
+
+### 2. ฟังก์ชันการแจกแจงสะสม (CDF)
+$$\Phi(x) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^x e^{-\frac{1}{2} u^2} \, du = \frac{1}{2} \left[ 1 + \text{erf}\left( \frac{x}{\sqrt{2}} \right) \right]$$
+
+SabiQuant ใช้การประมาณค่าแบบตรรกยะของเชบีเชฟ (Hart's rational Chebyshev approximation) โดยมีความคลาดเคลื่อนสัมบูรณ์ $|\epsilon| < 10^{-16}$
+
+### 3. ฟังก์ชันการแจกแจงสะสมผกผัน / ควอนไทล์ ($\Phi^{-1}(p)$)
+แปลงค่าความน่าจะเป็นสะสม $p \in (0, 1)$ ไปเป็นค่าคะแนนมาตรฐาน $z$:
+
+$$z = \Phi^{-1}(p)$$
+
+พัฒนาตามอัลกอริทึมของ Peter John Acklam พร้อมขั้นตอน Refinement ให้ความแม่นยำสูงถึง $1.15 \times 10^{-9}$ ครอบคลุมทั้งบริเวณแกนกลางและบริเวณหางสุดขั้ว ($10^{-30} \le p \le 1 - 10^{-30}$)
+
+---
+
+## ตัวอย่างโค้ดในภาษา Rust
+
+```rust
+use sabiquant::math::distributions::NormalDistribution;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let standard_normal = NormalDistribution::standard();
+
+    // ประเมินค่า PDF ที่ x = 0
+    let pdf_0 = standard_normal.pdf(0.0);
+    println!("Standard Normal PDF(0): {:.6}", pdf_0); // 1 / sqrt(2*pi) ≈ 0.398942
+
+    // ประเมินค่า CDF ที่ z = 1.96 (ระดับความเชื่อมั่นสองด้านประมาณ 97.5%)
+    let cdf_196 = standard_normal.cdf(1.959964);
+    println!("CDF(1.96):              {:.4}%", cdf_196 * 100.0); // 97.50%
+
+    // Inverse CDF: ตัวคูณ 99% VaR ระยะ 1 วัน
+    let p_var99 = 0.99;
+    let z_var99 = standard_normal.inverse_cdf(p_var99)?;
+    println!("99% VaR Critical Value: {:.4}", z_var99); // 2.3263
+
+    // กำหนดค่าเฉลี่ยและส่วนเบี่ยงเบนมาตรฐานตามต้องการ (เช่น ผลตอบแทนสินทรัพย์)
+    let asset_dist = NormalDistribution::new(0.08, 0.15)?; // ผลตอบแทน 8%, ความผันผวน 15%
+    println!("Prob(Return < 0%):      {:.2}%", asset_dist.cdf(0.0) * 100.0);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  การคำนวณพหุนามทั้งหมดใช้โครงสร้างของฮอร์เนอร์ (Horner's Scheme) เพื่อลดข้อผิดพลาดจากการปัดเศษเลขทศนิยมลอยตัวและดึงประสิทธิภาพการประมวลผลของท่อส่งคำสั่ง SIMD สูงสุด
+</Aside>
+

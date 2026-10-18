@@ -1,0 +1,61 @@
+---
+title: Normal Distribution
+description: High-precision Standard Normal PDF, CDF, and Inverse CDF (Quantile) implemented in std without external dependencies.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Analytical option pricing (Black-Scholes-Merton, Bachelier) and Value-at-Risk (VaR) calculations require standard normal probability functions evaluated to double-precision machine epsilon.
+
+## Mathematical Functions
+
+### 1. Probability Density Function (PDF)
+$$\phi(x) = \frac{1}{\sqrt{2\pi}} e^{-\frac{1}{2} x^2}$$
+
+### 2. Cumulative Distribution Function (CDF)
+$$\Phi(x) = \frac{1}{\sqrt{2\pi}} \int_{-\infty}^x e^{-\frac{1}{2} u^2} \, du = \frac{1}{2} \left[ 1 + \text{erf}\left( \frac{x}{\sqrt{2}} \right) \right]$$
+
+SabiQuant uses Hart's high-precision rational Chebyshev approximation with absolute error $|\epsilon| < 10^{-16}$.
+
+### 3. Inverse CDF / Quantile ($\Phi^{-1}(p)$)
+Maps cumulative probability $p \in (0, 1)$ to standard score $z$:
+
+$$z = \Phi^{-1}(p)$$
+
+Implemented via Peter John Acklam's rational approximation algorithm with refinement, accurate to $1.15 \times 10^{-9}$ across central and extreme tail regions ($10^{-30} \le p \le 1 - 10^{-30}$).
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::math::distributions::NormalDistribution;
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let standard_normal = NormalDistribution::standard();
+
+    // Evaluate PDF at x = 0
+    let pdf_0 = standard_normal.pdf(0.0);
+    println!("Standard Normal PDF(0): {:.6}", pdf_0); // 1 / sqrt(2*pi) ≈ 0.398942
+
+    // Evaluate CDF at z = 1.96 (approx 97.5% two-tailed confidence level)
+    let cdf_196 = standard_normal.cdf(1.959964);
+    println!("CDF(1.96):              {:.4}%", cdf_196 * 100.0); // 97.50%
+
+    // Inverse CDF: 99% 1-day Value at Risk multiplier
+    let p_var99 = 0.99;
+    let z_var99 = standard_normal.inverse_cdf(p_var99)?;
+    println!("99% VaR Critical Value: {:.4}", z_var99); // 2.3263
+
+    // Arbitrary Mean and Standard Deviation (e.g. Asset Returns)
+    let asset_dist = NormalDistribution::new(0.08, 0.15)?; // 8% return, 15% vol
+    println!("Prob(Return < 0%):      {:.2}%", asset_dist.cdf(0.0) * 100.0);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  All polynomial evaluations utilize Horner's scheme to minimize floating-point round-off errors and maximize SIMD pipeline utilization.
+</Aside>
+

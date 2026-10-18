@@ -1,0 +1,78 @@
+---
+title: วันที่และช่วงเวลา (Dates & Periods)
+description: การคำนวณวันที่ ช่วงเวลาสัญญาการเงิน (Tenors) และคณิตศาสตร์เกี่ยวกับปฏิทินแบบ std-only ประสิทธิภาพสูงใน SabiQuant
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+<Aside type="note" title="Single Source of Truth">
+  เอกสารต้นฉบับภาษาอังกฤษ ([English Documentation](/sabiquant-docs/foundations/dates-and-periods/)) คือ Single Source of Truth ของโปรเจกต์
+</Aside>
+
+การคำนวณวันที่ในระบบการเงินต้องการความแม่นยำสูงสุด การตรวจสอบปีอธิกสุรทิน (Leap Year) และการคำนวณปฏิทินโดยไม่มีค่าใช้จ่ายแฝงของ Runtime ภายนอก SabiQuant มอบชนิดข้อมูล `Date` และ `Period` ในตัวที่พัฒนาขึ้นบน `std` โดยเฉพาะ
+
+## ชนิดข้อมูล `Date`
+
+โครงสร้าง `Date` แทนวันที่ในปฏิทินเกรกอเรียน (Gregorian Calendar) พร้อมกฎการตรวจสอบความถูกต้อง:
+
+```rust
+use sabiquant::core::{Date, Month, Weekday};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // สร้างวันที่จาก ปี, เดือน, วัน
+    let d1 = Date::from_ymd(2025, 2, 28)?;
+    
+    // ตรวจสอบปีอธิกสุรทิน (Leap Year)
+    println!("Is 2024 a leap year? {}", Date::is_leap_year(2024)); // true
+    println!("Is 2025 a leap year? {}", Date::is_leap_year(2025)); // false
+
+    // การเพิ่ม/ลดวัน
+    let tomorrow = d1.add_days(1);
+    println!("Next day: {}", tomorrow); // 2025-03-01
+
+    // ตรวจหาวันในสัปดาห์ (Day of the week)
+    let weekday: Weekday = d1.weekday();
+    println!("Weekday: {:?}", weekday);
+
+    // คำนวณจำนวนวันระหว่างสองช่วง
+    let d2 = Date::from_ymd(2025, 12, 31)?;
+    let days_diff = d2.days_between(&d1);
+    println!("Days between: {}", days_diff);
+
+    Ok(())
+}
+```
+
+---
+
+## ช่วงเวลาสัญญาการเงินและชนิดข้อมูล `Period` (Tenors)
+
+Tenor กำหนดช่วงระยะเวลาที่ใช้กันทั่วไปในสัญญาทางการเงิน (เช่น `3M`, `6M`, `1Y`, `5Y`):
+
+```rust
+use sabiquant::core::{Date, Period, TimeUnit};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let start = Date::from_ymd(2025, 1, 31)?;
+
+    // สร้าง Period ตามหน่วยเวลาต่างๆ
+    let p_3m = Period::new(3, TimeUnit::Months);
+    let p_1y = Period::years(1);
+    let p_2w = Period::weeks(2);
+    let p_10d = Period::days(10);
+
+    // อนุสัญญาการเลื่อนวันสิ้นเดือน (End of Month - EOM roll)
+    let end_3m = start.advance_period(&p_3m, true);
+    println!("31 Jan + 3M (with EOM): {}", end_3m); // 2025-04-30
+
+    Ok(())
+}
+```
+
+---
+
+## คุณลักษณะด้านประสิทธิภาพ (Performance Characteristics)
+
+- **Zero Allocations:** `Date` เป็น `Copy` type ที่ถูกจัดเก็บภายในรูปแบบจำนวนเต็มขนาด 32-bit (Packed integer)
+- **Constant Time:** การบวกวัน, การค้นหาวันในสัปดาห์, และการตรวจสอบปีอธิกสุรทิน ทำงานที่ความเร็ว $O(1)$ โดยไม่มี Branch misprediction บนฮาร์ดแวร์สมัยใหม่
+

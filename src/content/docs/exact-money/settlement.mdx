@@ -1,0 +1,64 @@
+---
+title: Settlement Boundary & Monetary Recipes
+description: Defensive patterns to prevent rounding leaks, component vs total rounding discrepancies, and ledger mismatches.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+A classic pitfall in financial engineering is the mismatch between **Continuous Valuation** (pricing models in `f64`) and **Discrete Settlement** (cash flows posted to general ledgers in currency subunits).
+
+SabiQuant introduces an explicit **Settlement Boundary** architecture to eliminate these discrepancies.
+
+## The Component vs. Total Dilemma
+
+Consider a portfolio of $N$ coupon payments:
+
+1. **Component Rounding:** Each individual cash flow is rounded to currency subunits (e.g. 2 decimal places for USD/EUR) before summing:
+   $$\text{Total}_{\text{comp}} = \sum_{i=1}^n \text{Round}(c_i)$$
+
+2. **Total Rounding:** The full unrounded sum is accumulated, and only the final total is rounded:
+   $$\text{Total}_{\text{total}} = \text{Round}\left(\sum_{i=1}^n c_i\right)$$
+
+Over thousands of trades, $\text{Total}_{\text{comp}} \ne \text{Total}_{\text{total}}$, creating auditing breaks.
+
+---
+
+## Defensive Monetary Recipes
+
+SabiQuant provides `MonetaryRecipe` structures that enforce contractual agreement on rounding boundaries:
+
+```rust
+use sabiquant::exact::{DecimalAmount, RoundingMode, SettlementPolicy};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let items = vec![
+        DecimalAmount::from_str("10.004")?,
+        DecimalAmount::from_str("10.004")?,
+        DecimalAmount::from_str("10.004")?,
+    ];
+
+    // Policy A: Component Rounding (Round each first)
+    let sum_component: DecimalAmount = items.iter()
+        .map(|x| x.round(2, RoundingMode::HalfEven).unwrap())
+        .sum();
+
+    // Policy B: Total Rounding (Sum then round)
+    let raw_sum: DecimalAmount = items.iter().cloned().sum();
+    let sum_total = raw_sum.round(2, RoundingMode::HalfEven)?;
+
+    println!("Sum of Component Rounding: {}", sum_component); // 30.00
+    println!("Rounded Total:             {}", sum_total);     // 30.01
+
+    // Enforce explicit settlement policy
+    let policy = SettlementPolicy::EnforceComponentRounding;
+    let finalized = policy.settle(&items, 2, RoundingMode::HalfEven)?;
+    println!("Finalized Settlement Amount: {}", finalized);
+
+    Ok(())
+}
+```
+
+<Aside type="caution">
+  Never mix unrounded `f64` values into ledger settlement tables. Convert to `DecimalAmount` at the clearly defined Settlement Boundary.
+</Aside>
+

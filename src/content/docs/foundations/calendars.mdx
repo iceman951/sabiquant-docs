@@ -1,0 +1,69 @@
+---
+title: Market Calendars & Conventions
+description: Business day conventions, TARGET settlement calendars, and holiday adjustment rules.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Financial contracts only settle on valid business days. SabiQuant provides high-performance market calendars and standard ISDA business day adjustment rules.
+
+## Business Day Conventions
+
+When a scheduled date falls on a weekend or public holiday, it must be adjusted according to a convention:
+
+| Convention | Rule |
+| :--- | :--- |
+| **`Following`** | Adjust to the first business day *after* the given date. |
+| **`ModifiedFollowing`** | Adjust to the first business day after, *unless* it falls in the next month, in which case roll *backward* to the preceding business day. |
+| **`Preceding`** | Adjust to the first business day *before* the given date. |
+| **`ModifiedPreceding`** | Adjust to the first business day before, *unless* it falls in the prior month, in which case roll *forward*. |
+| **`Unadjusted`** | Do not adjust; retain original calendar date. |
+
+---
+
+## Market Calendars
+
+### TARGET Calendar (`TargetCalendar`)
+
+The European interbank settlement calendar (TARGET2 / T2), observing:
+- Saturdays and Sundays
+- New Year's Day (Jan 1)
+- Good Friday & Easter Monday
+- Labour Day (May 1)
+- Christmas Day (Dec 25) & Boxing Day (Dec 26)
+
+### Rust Example
+
+```rust
+use sabiquant::core::{Date, BusinessDayConvention};
+use sabiquant::core::calendars::{Calendar, TargetCalendar, WeekendOnlyCalendar};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let calendar = TargetCalendar::default();
+
+    // May 1st (Labour Day) is a holiday in TARGET
+    let labour_day = Date::from_ymd(2025, 5, 1)?;
+    println!("Is Labour Day a business day? {}", calendar.is_business_day(labour_day)); // false
+
+    // Adjust using Following
+    let adjusted_following = calendar.adjust(labour_day, BusinessDayConvention::Following);
+    println!("Following adjustment: {}", adjusted_following); // 2025-05-02
+
+    // Advance 5 business days
+    let advanced_date = calendar.advance_business_days(labour_day, 5);
+    println!("5 business days later: {}", advanced_date);
+
+    // Count business days between two dates
+    let start = Date::from_ymd(2025, 5, 1)?;
+    let end   = Date::from_ymd(2025, 5, 31)?;
+    let bdays = calendar.business_days_between(start, end);
+    println!("Business days in May 2025: {}", bdays);
+
+    Ok(())
+}
+```
+
+<Aside type="tip">
+  Custom calendars can be created by implementing the `Calendar` trait, enabling internal enterprise holiday schedules or custom exchange trading rules.
+</Aside>
+

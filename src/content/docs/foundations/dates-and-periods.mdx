@@ -1,0 +1,72 @@
+---
+title: Dates & Periods
+description: High-performance, std-only date calculations, tenors, and period arithmetic in SabiQuant.
+---
+
+Financial date calculations require extreme accuracy, leap year validation, and calendar arithmetic without external runtime overhead. SabiQuant provides native `Date` and `Period` types implemented strictly in `std`.
+
+## The `Date` Type
+
+The `Date` struct represents a Gregorian calendar date with validation rules:
+
+```rust
+use sabiquant::core::{Date, Month, Weekday};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Construct from Year, Month, Day
+    let d1 = Date::from_ymd(2025, 2, 28)?;
+    
+    // Check leap year
+    println!("Is 2024 a leap year? {}", Date::is_leap_year(2024)); // true
+    println!("Is 2025 a leap year? {}", Date::is_leap_year(2025)); // false
+
+    // Date navigation
+    let tomorrow = d1.add_days(1);
+    println!("Next day: {}", tomorrow); // 2025-03-01
+
+    // Day of the week
+    let weekday: Weekday = d1.weekday();
+    println!("Weekday: {:?}", weekday);
+
+    // Days difference
+    let d2 = Date::from_ymd(2025, 12, 31)?;
+    let days_diff = d2.days_between(&d1);
+    println!("Days between: {}", days_diff);
+
+    Ok(())
+}
+```
+
+---
+
+## Tenors & The `Period` Type
+
+Tenors define durations commonly used in financial contracts (e.g., `3M`, `6M`, `1Y`, `5Y`):
+
+```rust
+use sabiquant::core::{Date, Period, TimeUnit};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let start = Date::from_ymd(2025, 1, 31)?;
+
+    // Construct periods
+    let p_3m = Period::new(3, TimeUnit::Months);
+    let p_1y = Period::years(1);
+    let p_2w = Period::weeks(2);
+    let p_10d = Period::days(10);
+
+    // End of Month (EOM) roll convention
+    let end_3m = start.advance_period(&p_3m, true);
+    println!("31 Jan + 3M (with EOM): {}", end_3m); // 2025-04-30
+
+    Ok(())
+}
+```
+
+---
+
+## Performance Characteristics
+
+- **Zero Allocations:** `Date` is a `Copy` type stored as a packed 32-bit integer.
+- **Constant Time:** Date additions, day-of-week lookups, and leap year tests execute in $O(1)$ operations with zero branch mispredictions on modern x86/ARM hardware.
+

@@ -1,0 +1,58 @@
+---
+title: Schedule Generation
+description: Date schedule construction with stub handling, end-of-month rolls, and IMM date conventions.
+---
+
+import { Aside } from '@astrojs/starlight/components';
+
+Financial contracts (swaps, bonds, loans) require precise coupon payment and accrual date schedules. SabiQuant's `ScheduleBuilder` implements the full ISDA schedule algorithm.
+
+## Generation Options
+
+A schedule is generated between an effective date and a termination date:
+
+- **Tenor:** Step interval (e.g. 3M, 6M, 1Y).
+- **Calendar & Adjustment:** Rolls holiday dates forward/backward.
+- **Stub Conventions:**
+  - `ShortFront` / `LongFront`: Short or long first coupon period.
+  - `ShortBack` / `LongBack`: Short or long final coupon period.
+- **Roll Conventions:**
+  - `EndOfMonth`: Rolls to the last calendar day if effective date is at month end.
+  - `IMM`: Rolls to International Monetary Market dates (3rd Wednesday of March, June, September, December).
+
+---
+
+## Rust Code Example
+
+```rust
+use sabiquant::core::{Date, Period, TimeUnit, Frequency, BusinessDayConvention};
+use sabiquant::core::calendars::TargetCalendar;
+use sabiquant::schedules::{ScheduleBuilder, StubConvention};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let effective_date   = Date::from_ymd(2025, 2, 15)?;
+    let termination_date = Date::from_ymd(2028, 8, 15)?;
+
+    let calendar = TargetCalendar::default();
+
+    // 6-month coupon schedule with Short Front stub
+    let schedule = ScheduleBuilder::new()
+        .effective_date(effective_date)
+        .termination_date(termination_date)
+        .tenor(Period::new(6, TimeUnit::Months))
+        .calendar(calendar)
+        .convention(BusinessDayConvention::ModifiedFollowing)
+        .termination_convention(BusinessDayConvention::ModifiedFollowing)
+        .stub_convention(StubConvention::ShortFront)
+        .end_of_month(false)
+        .build()?;
+
+    println!("Schedule contains {} dates:", schedule.len());
+    for (i, date) in schedule.dates().iter().enumerate() {
+        println!("  Period {}: {}", i, date);
+    }
+
+    Ok(())
+}
+```
+
