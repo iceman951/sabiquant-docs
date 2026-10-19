@@ -7,6 +7,8 @@
     "start": "astro dev",
     "build": "astro build",
     "preview": "astro preview",
+    "cf:preview": "astro build && npx --yes wrangler@4 dev",
+    "deploy": "astro build && npx --yes wrangler@4 deploy",
     "astro": "astro"
   },
   "dependencies": {

@@ -5,8 +5,8 @@ import rehypeKatex from 'rehype-katex';
 
 // https://astro.build/config
 export default defineConfig({
-  site: 'https://iceman951.github.io',
-  base: '/sabiquant-docs',
+  // Served from the root of a custom domain on Cloudflare (no sub-path `base`).
+  site: 'https://sabiquant.icerust.dev',
   markdown: {
     remarkPlugins: [remarkMath],
     rehypePlugins: [rehypeKatex],

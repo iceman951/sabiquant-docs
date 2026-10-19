@@ -1,0 +1,20 @@
+{
+  // Cloudflare Workers (Static Assets) deployment for the SabiQuant docs.
+  // Static-only: no Worker script, Cloudflare serves the Astro `dist/` output directly.
+  "name": "sabiquant-docs",
+  "compatibility_date": "2026-10-01",
+  "assets": {
+    "directory": "./dist",
+    // Astro emits `/page/index.html`; serve it at `/page/` and redirect `/page` -> `/page/`.
+    "html_handling": "auto-trailing-slash",
+    // Serve Starlight's generated `dist/404.html` (with HTTP 404) for unknown paths.
+    "not_found_handling": "404-page"
+  },
+  // Custom domain. Requires the `icerust.dev` zone to be active in the same Cloudflare account;
+  // Cloudflare creates the DNS record and TLS certificate automatically on first deploy.
+  "routes": [
+    { "pattern": "sabiquant.icerust.dev", "custom_domain": true }
+  ],
+  // Keep the *.workers.dev URL available as a fallback / smoke-test endpoint.
+  "workers_dev": true
+}
